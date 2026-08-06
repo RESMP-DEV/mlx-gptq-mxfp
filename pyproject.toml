@@ -1,0 +1,33 @@
+[project]
+name = "mlx-gptq"
+version = "0.1.0"
+description = "CUDA-calibrated GPTQ and AWQ for standard MLX affine, MXFP4, and MXFP8 models"
+requires-python = ">=3.11"
+license = "MIT"
+readme = "README.md"
+dependencies = [
+    "torch>=2.4",
+    "transformers>=4.55",
+    "safetensors>=0.4",
+    "numpy",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+# Stage B (packing/inject) runs on Apple Silicon only
+mlx = ["mlx>=0.26", "mlx-lm>=0.24"]
+dev = ["pytest"]
+
+[project.scripts]
+mlx-gptq-calibrate = "mlx_gptq.calibrate:main"
+mlx-gptq-pack = "mlx_gptq.pack:main"
+
+[project.urls]
+Repository = "https://huggingface.co/RESMP-DEV/mlx-gptq-mxfp"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mlx_gptq*"]
