@@ -1,0 +1,9 @@
+.sindexer/
+.venv/
+.uv-cache/
+.DS_Store
+__pycache__/
+*.pyc
+.env
+.mlx-cuda-env
+probe-results/
