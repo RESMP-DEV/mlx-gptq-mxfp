@@ -1,15 +1,3 @@
----
-license: mit
-tags:
-  - mlx
-  - cuda
-  - gptq
-  - awq
-  - mxfp4
-  - mxfp8
-  - quantization
----
-
 # MLX GPTQ MXFP
 
 GPTQ-calibrated quantization for **standard MLX (mlx-lm) models**, with the

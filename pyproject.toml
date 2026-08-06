@@ -23,7 +23,7 @@ mlx-gptq-calibrate = "mlx_gptq.calibrate:main"
 mlx-gptq-pack = "mlx_gptq.pack:main"
 
 [project.urls]
-Repository = "https://huggingface.co/RESMP-DEV/mlx-gptq-mxfp"
+Repository = "https://github.com/RESMP-DEV/mlx-gptq-mxfp"
 
 [build-system]
 requires = ["setuptools>=64"]
