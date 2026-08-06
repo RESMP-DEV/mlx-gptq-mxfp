@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://huggingface.co/RESMP-DEV/mlx-cuda-mxfp"
+Repository = "https://github.com/RESMP-DEV/mlx-cuda-mxfp"
 
 [build-system]
 requires = ["hatchling"]

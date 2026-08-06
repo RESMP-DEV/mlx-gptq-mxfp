@@ -1,13 +1,3 @@
----
-license: mit
-tags:
-  - mlx
-  - cuda
-  - mxfp4
-  - mxfp8
-  - benchmark
----
-
 # MLX CUDA MXFP
 
 A small, reproducible environment for probing BF16, native MXFP4, and native
