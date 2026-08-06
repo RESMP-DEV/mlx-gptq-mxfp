@@ -8,3 +8,9 @@ Validation performed on 2026-08-06:
   fused-expert routing capture, artifact selection, and LFM ShortConv AWQ.
 
 No private model weights or calibration samples are required by the tests.
+
+Publication checks:
+
+- Tracked-file secret scan: zero findings.
+- OSV-Scanner on the frozen lockfile: no issues found.
+- `pip-audit` on the frozen resolved requirements: no known vulnerabilities.
