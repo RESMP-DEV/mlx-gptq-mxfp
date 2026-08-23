@@ -41,6 +41,7 @@ DEFAULT_EXCLUDE = r"(^|\.)gate$|(^|\.)router($|\.)|shared_expert_gate|e_score"
 # Raw checkpoint access
 # --------------------------------------------------------------------------
 
+
 class RawShardIndex:
     """Name -> shard lookup over a HF model directory's safetensors files."""
 
@@ -65,9 +66,7 @@ class RawShardIndex:
         if fname not in self._open:
             from safetensors import safe_open
 
-            self._open[fname] = safe_open(
-                os.path.join(self.dir, fname), framework="pt"
-            )
+            self._open[fname] = safe_open(os.path.join(self.dir, fname), framework="pt")
         return self._open[fname]
 
     def has(self, name: str) -> bool:
@@ -80,8 +79,9 @@ class RawShardIndex:
         return [n for n in self.weight_map if n.startswith(prefix)]
 
 
-def materialize_module(module: torch.nn.Module, prefix: str, shards: RawShardIndex,
-                       device, dtype) -> None:
+def materialize_module(
+    module: torch.nn.Module, prefix: str, shards: RawShardIndex, device, dtype
+) -> None:
     """Fill a meta-device module's params/buffers from raw checkpoint tensors.
 
     Handles the per-expert -> fused 3D conversion used by transformers >= 5:
@@ -110,7 +110,9 @@ def materialize_module(module: torch.nn.Module, prefix: str, shards: RawShardInd
                     fused[e, :I] = g
                     fused[e, I:] = u
                 else:
-                    fused[e] = shards.get(f"{prefix}.{base}.{e}.{kind}.weight").to(dtype)
+                    fused[e] = shards.get(f"{prefix}.{base}.{e}.{kind}.weight").to(
+                        dtype
+                    )
             sd[pname] = fused
             continue
         raise KeyError(f"cannot materialize parameter {prefix}.{pname} from checkpoint")
@@ -127,7 +129,9 @@ def materialize_module(module: torch.nn.Module, prefix: str, shards: RawShardInd
     # sanity: nothing left on meta
     for n, p in module.named_parameters():
         if p.is_meta:
-            raise RuntimeError(f"parameter {prefix}.{n} still on meta after materialize")
+            raise RuntimeError(
+                f"parameter {prefix}.{n} still on meta after materialize"
+            )
 
 
 def free_module(module: torch.nn.Module):
@@ -138,6 +142,7 @@ def free_module(module: torch.nn.Module):
 # --------------------------------------------------------------------------
 # Layer-0 input catcher
 # --------------------------------------------------------------------------
+
 
 class _CatchDone(Exception):
     pass
@@ -168,6 +173,7 @@ def _move_kwargs(kwargs, device):
 # Solve planning
 # --------------------------------------------------------------------------
 
+
 def artifact_names_for_fused(layer_prefix: str, task: FusedExpertTask, expert: int):
     """Raw-checkpoint style artifact names for one expert of a fused param.
 
@@ -192,8 +198,8 @@ def _expert_chunk_size(C: int, R: int, vram_gb: float) -> int:
 
 class SolveResult:
     def __init__(self):
-        self.tensors = {}   # artifact name -> (q, scales, biases) on CPU
-        self.meta = {}      # artifact name -> info
+        self.tensors = {}  # artifact name -> (q, scales, biases) on CPU
+        self.meta = {}  # artifact name -> info
         self.lock = threading.Lock()
 
     def add(self, name, q, s, b, info):
@@ -205,6 +211,7 @@ class SolveResult:
 # --------------------------------------------------------------------------
 # Main pipeline
 # --------------------------------------------------------------------------
+
 
 class Pipeline:
     def __init__(self, model, shards: RawShardIndex, args):
@@ -326,21 +333,33 @@ class Pipeline:
                 W = task.module.weight.detach().to(device, torch.float32).unsqueeze(0)
                 H = get_hessian(task.stash_key, device).unsqueeze(0)
                 q, s, b, W_dq, rel = solve_gptq(
-                    W, H, bits, self.args.group_size,
-                    damp=self.args.damp, clip=self.args.clip,
+                    W,
+                    H,
+                    bits,
+                    self.args.group_size,
+                    damp=self.args.damp,
+                    clip=self.args.clip,
                     storage_dtype=self.storage_dtype,
                     mode=self.args.mode,
                     mxfp_algorithm=self.args.mxfp_algorithm,
                 )
                 task.module.weight.data.copy_(W_dq[0].to(task.module.weight.dtype))
-                result.add(name, q[0], s[0], None if b is None else b[0], {
-                    "bits": bits, "group_size": self.args.group_size,
-                    "mode": self.args.mode,
-                    "kind": "linear",
-                    "out_features": W.shape[1], "in_features": W.shape[2],
-                    "tokens": mgr.stashes[task.stash_key].tokens,
-                    "rel_err": round(float(rel[0]), 6),
-                })
+                result.add(
+                    name,
+                    q[0],
+                    s[0],
+                    None if b is None else b[0],
+                    {
+                        "bits": bits,
+                        "group_size": self.args.group_size,
+                        "mode": self.args.mode,
+                        "kind": "linear",
+                        "out_features": W.shape[1],
+                        "in_features": W.shape[2],
+                        "tokens": mgr.stashes[task.stash_key].tokens,
+                        "rel_err": round(float(rel[0]), 6),
+                    },
+                )
             finally:
                 dev_q.put(device)
 
@@ -351,62 +370,87 @@ class Pipeline:
             # gate/up halves of a fused param always share bits (they land in
             # one stacked MLX tensor); the first expert's first artifact decides.
             bits = self._bits_for(artifact_names_for_fused(prefix, task, 0)[0])
-            chunk = _expert_chunk_size(C, R, self.args.vram_gb)
-            spans = [(e0, min(e0 + chunk, E)) for e0 in range(0, E, chunk)]
+            next_expert = 0
+            span_lock = threading.Lock()
 
-            def one_span(span):
+            def one_span(device, span):
                 e0, e1 = span
-                device = dev_q.get()
-                try:
-                    Hs, Ws = [], []
-                    for e in range(e0, e1):
-                        Hs.append(mgr.stashes[task.stash_keys[e]].hessian(device))
-                        Ws.append(p[e].detach().to(device, torch.float32))
-                    H = torch.stack(Hs); del Hs
-                    W = torch.stack(Ws); del Ws
-                    q, s, b, W_dq, rel = solve_gptq(
-                        W, H, bits, self.args.group_size,
-                        damp=self.args.damp, clip=self.args.clip,
-                        storage_dtype=self.storage_dtype,
-                        mode=self.args.mode,
-                        mxfp_algorithm=self.args.mxfp_algorithm,
-                    )
-                    del H
-                    p.data[e0:e1].copy_(W_dq.to(p.dtype).to(p.device))
-                    for i, e in enumerate(range(e0, e1)):
-                        names = artifact_names_for_fused(prefix, task, e)
-                        if len(names) == 1:
-                            halves = [(q[i], s[i], None if b is None else b[i])]
-                        else:
-                            halves = [
-                                (
-                                    q[i, : R // 2],
-                                    s[i, : R // 2],
-                                    None if b is None else b[i, : R // 2],
-                                ),
-                                (
-                                    q[i, R // 2 :],
-                                    s[i, R // 2 :],
-                                    None if b is None else b[i, R // 2 :],
-                                ),
-                            ]
-                        for nm, (qq, ss, bb) in zip(names, halves):
-                            result.add(nm, qq, ss, bb, {
-                                "bits": bits, "group_size": self.args.group_size,
+                Hs, Ws = [], []
+                for e in range(e0, e1):
+                    Hs.append(mgr.stashes[task.stash_keys[e]].hessian(device))
+                    Ws.append(p[e].detach().to(device, torch.float32))
+                H = torch.stack(Hs)
+                del Hs
+                W = torch.stack(Ws)
+                del Ws
+                q, s, b, W_dq, rel = solve_gptq(
+                    W,
+                    H,
+                    bits,
+                    self.args.group_size,
+                    damp=self.args.damp,
+                    clip=self.args.clip,
+                    storage_dtype=self.storage_dtype,
+                    mode=self.args.mode,
+                    mxfp_algorithm=self.args.mxfp_algorithm,
+                )
+                del H
+                p.data[e0:e1].copy_(W_dq.to(p.dtype).to(p.device))
+                for i, e in enumerate(range(e0, e1)):
+                    names = artifact_names_for_fused(prefix, task, e)
+                    if len(names) == 1:
+                        halves = [(q[i], s[i], None if b is None else b[i])]
+                    else:
+                        halves = [
+                            (
+                                q[i, : R // 2],
+                                s[i, : R // 2],
+                                None if b is None else b[i, : R // 2],
+                            ),
+                            (
+                                q[i, R // 2 :],
+                                s[i, R // 2 :],
+                                None if b is None else b[i, R // 2 :],
+                            ),
+                        ]
+                    for nm, (qq, ss, bb) in zip(names, halves):
+                        result.add(
+                            nm,
+                            qq,
+                            ss,
+                            bb,
+                            {
+                                "bits": bits,
+                                "group_size": self.args.group_size,
                                 "mode": self.args.mode,
                                 "kind": "expert",
-                                "out_features": qq.shape[0], "in_features": C,
+                                "out_features": qq.shape[0],
+                                "in_features": C,
                                 "tokens": mgr.stashes[task.stash_keys[e]].tokens,
                                 "rel_err": round(float(rel[i]), 6),
-                            })
-                    del W, q, s
-                    if str(device).startswith("cuda"):
-                        torch.cuda.empty_cache()
-                finally:
-                    dev_q.put(device)
+                            },
+                        )
+                del W, q, s
+                if str(device).startswith("cuda"):
+                    torch.cuda.empty_cache()
+
+            def worker(device):
+                nonlocal next_expert
+                budget = self.args.vram_gb
+                if isinstance(budget, dict):
+                    budget = budget[str(device)]
+                chunk = _expert_chunk_size(C, R, budget)
+                while True:
+                    with span_lock:
+                        if next_expert >= E:
+                            return
+                        e0 = next_expert
+                        next_expert = min(e0 + chunk, E)
+                        span = (e0, next_expert)
+                    one_span(device, span)
 
             with ThreadPoolExecutor(max_workers=len(devices)) as ex:
-                list(ex.map(one_span, spans))
+                list(ex.map(worker, devices))
 
         # Solve fused experts (the bulk) first, then the dense linears.
         for task in mgr.fused_tasks:
@@ -425,17 +469,24 @@ class Pipeline:
                 if reader.has(art):
                     q, s, b, info = reader.get(art)
                     G = info["group_size"]
-                    dq = dequantize_artifact(
-                        q, s, b, info.get("mode", "affine"), G
+                    dq = dequantize_artifact(q, s, b, info.get("mode", "affine"), G)
+                    mod.weight.data.copy_(
+                        dq.reshape(q.shape).to(mod.weight.dtype).to(mod.weight.device)
                     )
-                    mod.weight.data.copy_(dq.reshape(q.shape).to(mod.weight.dtype).to(mod.weight.device))
             for pname, p in mod.named_parameters(recurse=False):
-                if p.dim() == 3 and pname in ("gate_up_proj", "gate_proj", "up_proj", "down_proj"):
-                    E, R, C = p.shape
+                if p.dim() == 3 and pname in (
+                    "gate_up_proj",
+                    "gate_proj",
+                    "up_proj",
+                    "down_proj",
+                ):
+                    E, R, _C = p.shape
                     for e in range(E):
                         if pname == "gate_up_proj":
-                            arts = [f"{prefix}.{name}.{e}.gate_proj.weight",
-                                    f"{prefix}.{name}.{e}.up_proj.weight"]
+                            arts = [
+                                f"{prefix}.{name}.{e}.gate_proj.weight",
+                                f"{prefix}.{name}.{e}.up_proj.weight",
+                            ]
                             rows = [(0, R // 2), (R // 2, R)]
                         else:
                             arts = [f"{prefix}.{name}.{e}.{pname}.weight"]
@@ -448,7 +499,9 @@ class Pipeline:
                             dq = dequantize_artifact(
                                 q, s, b, info.get("mode", "affine"), G
                             )
-                            p.data[e, r0:r1].copy_(dq.reshape(q.shape).to(p.dtype).to(p.device))
+                            p.data[e, r0:r1].copy_(
+                                dq.reshape(q.shape).to(p.dtype).to(p.device)
+                            )
 
     # ---- orchestration -------------------------------------------------------
 
@@ -469,7 +522,9 @@ class Pipeline:
                 for i, (___, kw) in enumerate(batches):
                     batches[i] = (new_batches[i], kw)
                 free_module(layer)
-                log.info("layer %d: resumed from artifacts (%.1fs)", L, time.time() - t0)
+                log.info(
+                    "layer %d: resumed from artifacts (%.1fs)", L, time.time() - t0
+                )
                 continue
 
             mgr = CaptureManager(layer, self.args.exclude, self.args.group_size)
@@ -480,12 +535,24 @@ class Pipeline:
             if mgr.fused_tasks:
                 mgr.check_capture_happened()
                 for pname, (mn, med, mx, zeros) in mgr.expert_token_stats().items():
-                    log.info("layer %d %s tokens/expert min=%d med=%d max=%d zero=%d",
-                             L, pname, mn, med, mx, zeros)
+                    log.info(
+                        "layer %d %s tokens/expert min=%d med=%d max=%d zero=%d",
+                        L,
+                        pname,
+                        mn,
+                        med,
+                        mx,
+                        zeros,
+                    )
                     if zeros:
-                        log.warning("layer %d %s: %d experts saw ZERO tokens "
-                                    "(they fall back to data-free rounding); "
-                                    "consider more calibration samples", L, pname, zeros)
+                        log.warning(
+                            "layer %d %s: %d experts saw ZERO tokens "
+                            "(they fall back to data-free rounding); "
+                            "consider more calibration samples",
+                            L,
+                            pname,
+                            zeros,
+                        )
             t_cap = time.time()
 
             result = self.solve_layer(L, mgr)
@@ -504,10 +571,18 @@ class Pipeline:
             log.info(
                 "layer %d done: %d linears + %d experts | rel_err med=%.4f max=%.4f "
                 "| capture %.1fs solve %.1fs total %.1fs",
-                L, n_lin, n_exp,
+                L,
+                n_lin,
+                n_exp,
                 sorted(errs)[len(errs) // 2] if errs else -1,
                 max(errs) if errs else -1,
-                t_cap - t0, t_solve - t_cap, time.time() - t0,
+                t_cap - t0,
+                t_solve - t_cap,
+                time.time() - t0,
             )
 
-        log.info("all %d layers done in %.1f min", len(self.layers), (time.time() - t_start) / 60)
+        log.info(
+            "all %d layers done in %.1f min",
+            len(self.layers),
+            (time.time() - t_start) / 60,
+        )

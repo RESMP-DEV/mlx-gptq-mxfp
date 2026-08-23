@@ -59,18 +59,35 @@ def parse_overrides(specs):
     return out
 
 
+def parse_vram_budgets(spec: str, devices: list[str]) -> dict[str, float]:
+    values = [float(value.strip()) for value in spec.split(",")]
+    if len(values) == 1:
+        values *= len(devices)
+    if len(values) != len(devices):
+        raise ValueError(
+            "--vram-gb must be one value or one comma-separated value per device"
+        )
+    if any(value <= 0 for value in values):
+        raise ValueError("--vram-gb values must be positive")
+    return dict(zip(devices, values))
+
+
 def main(argv=None):
     from .artifacts import ArtifactReader, ArtifactWriter
     from .data import load_calibration
     from .grid import SUPPORTED_BITS, SUPPORTED_MODES, mode_defaults
     from .sequential import DEFAULT_EXCLUDE, Pipeline, RawShardIndex
 
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--model", required=True, help="HF model id or local dir")
     ap.add_argument("--output", required=True, help="artifact output dir")
-    ap.add_argument("--dataset", default=None,
-                    help="comma-separated: file.txt | file.jsonl[:field] | hf:name[:split[:field]]")
+    ap.add_argument(
+        "--dataset",
+        default=None,
+        help="comma-separated: file.txt | file.jsonl[:field] | hf:name[:split[:field]]",
+    )
     ap.add_argument(
         "--calibration-tokens",
         default=None,
@@ -91,10 +108,19 @@ def main(argv=None):
     ap.add_argument("--clip", default="mse", choices=("mse", "minmax"))
     ap.add_argument("--damp", type=float, default=0.01)
     ap.add_argument("--dtype", default="bfloat16", choices=("bfloat16", "float16"))
-    ap.add_argument("--devices", default=None,
-                    help="comma-separated, first is the forward device (default: all CUDA, else cpu)")
-    ap.add_argument("--vram-gb", type=float, default=16.0,
-                    help="per-GPU budget for batched expert solves")
+    ap.add_argument(
+        "--devices",
+        default=None,
+        help="comma-separated, first is the forward device (default: all CUDA, else cpu)",
+    )
+    ap.add_argument(
+        "--vram-gb",
+        default="16",
+        help=(
+            "expert-solve budget in GiB: one value for every device or a "
+            "comma-separated value corresponding to --devices"
+        ),
+    )
     ap.add_argument("--layers-attr", default="model.layers")
     ap.add_argument(
         "--checkpoint-model-prefix",
@@ -112,10 +138,17 @@ def main(argv=None):
             "--layers-attr"
         ),
     )
-    ap.add_argument("--exclude", default=DEFAULT_EXCLUDE,
-                    help="regex of layer-relative module names to leave unquantized")
-    ap.add_argument("--override", action="append", metavar="REGEX=BITS",
-                    help="per-tensor bit override, e.g. '.*down_proj.*=8' (repeatable)")
+    ap.add_argument(
+        "--exclude",
+        default=DEFAULT_EXCLUDE,
+        help="regex of layer-relative module names to leave unquantized",
+    )
+    ap.add_argument(
+        "--override",
+        action="append",
+        metavar="REGEX=BITS",
+        help="per-tensor bit override, e.g. '.*down_proj.*=8' (repeatable)",
+    )
     ap.add_argument("--trust-remote-code", action="store_true")
     ap.add_argument("--seed", type=int, default=17)
     args = ap.parse_args(argv)
@@ -140,8 +173,11 @@ def main(argv=None):
     if args.dataset is None and args.calibration_tokens is None:
         ap.error("one of --dataset or --calibration-tokens is required")
 
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
     if args.devices:
         args.devices = [d.strip() for d in args.devices.split(",")]
@@ -149,13 +185,20 @@ def main(argv=None):
         args.devices = [f"cuda:{i}" for i in range(torch.cuda.device_count())]
     else:
         args.devices = ["cpu"]
+    try:
+        args.vram_gb = parse_vram_budgets(args.vram_gb, args.devices)
+    except ValueError as exc:
+        ap.error(str(exc))
     args.overrides = parse_overrides(args.override)
     log.info("devices: %s (forward on %s)", args.devices, args.devices[0])
+    log.info("expert-solve VRAM budgets: %s", args.vram_gb)
 
     model_dir = resolve_model_dir(args.model)
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=args.trust_remote_code)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_dir, trust_remote_code=args.trust_remote_code
+    )
 
     tokens_path = os.path.join(args.output, "calib_tokens.npy")
     if os.path.exists(tokens_path):
@@ -173,7 +216,9 @@ def main(argv=None):
         samples = torch.from_numpy(samples_np)
         log.info("using pre-tokenized calibration windows: %s", tuple(samples.shape))
     else:
-        samples = load_calibration(tokenizer, args.dataset, args.nsamples, args.seqlen, args.seed)
+        samples = load_calibration(
+            tokenizer, args.dataset, args.nsamples, args.seqlen, args.seed
+        )
         os.makedirs(args.output, exist_ok=True)
         np.save(tokens_path, samples.numpy())
 
@@ -191,24 +236,27 @@ def main(argv=None):
     model = build_model(model_dir, args.dtype, args.trust_remote_code)
     shards = RawShardIndex(model_dir)
 
-    writer = ArtifactWriter(args.output, {
-        "model": args.model,
-        "algorithm": args.mxfp_algorithm if args.mode != "affine" else "gptq",
-        "mode": args.mode,
-        "bits": args.bits,
-        "group_size": args.group_size,
-        "storage_dtype": args.dtype,
-        "clip": args.clip,
-        "damp": args.damp,
-        "nsamples": int(samples.shape[0]),
-        "seqlen": int(samples.shape[1]),
-        "dataset": args.dataset,
-        "calibration_tokens": args.calibration_tokens,
-        "calibration_tokens_sha256": tokens_sha256,
-        "layers_attr": args.layers_attr,
-        "checkpoint_model_prefix": args.checkpoint_model_prefix,
-        "artifact_layers_prefix": args.artifact_layers_prefix,
-    })
+    writer = ArtifactWriter(
+        args.output,
+        {
+            "model": args.model,
+            "algorithm": args.mxfp_algorithm if args.mode != "affine" else "gptq",
+            "mode": args.mode,
+            "bits": args.bits,
+            "group_size": args.group_size,
+            "storage_dtype": args.dtype,
+            "clip": args.clip,
+            "damp": args.damp,
+            "nsamples": int(samples.shape[0]),
+            "seqlen": int(samples.shape[1]),
+            "dataset": args.dataset,
+            "calibration_tokens": args.calibration_tokens,
+            "calibration_tokens_sha256": tokens_sha256,
+            "layers_attr": args.layers_attr,
+            "checkpoint_model_prefix": args.checkpoint_model_prefix,
+            "artifact_layers_prefix": args.artifact_layers_prefix,
+        },
+    )
     reader = ArtifactReader(args.output) if writer.manifest["layers_done"] else None
 
     pipe = Pipeline(model, shards, args)

@@ -40,7 +40,7 @@ python -m mlx_gptq.calibrate \
     --dataset ~/calibration_datav3.txt \
     --nsamples 256 --seqlen 2048 --batch-size 4 \
     --bits 4 --group-size 64 \
-    --devices cuda:0,cuda:1,cuda:2,cuda:3 --vram-gb 16
+    --devices cuda:0,cuda:1,cuda:2,cuda:3 --vram-gb 16,16,16,16
 ```
 
 For native microscaling output, select `--mode mxfp4` or `--mode mxfp8`.
