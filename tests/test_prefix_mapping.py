@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import torch
 
+from mlx_gptq.pack import make_predicate
 from mlx_gptq.sequential import Pipeline
 
 
@@ -36,3 +37,15 @@ def test_multimodal_checkpoint_prefixes_are_independent():
     assert pipeline.artifact_layers_prefix_fmt.format(7) == (
         "language_model.model.layers.7"
     )
+
+
+def test_wrapped_lm_head_stays_unquantized_by_default():
+    predicate = make_predicate(
+        skip_regex=None,
+        head_bits=None,
+        embed_bits=None,
+        group_size=32,
+        mode="mxfp4",
+    )
+    assert predicate("language_model.lm_head", None) is False
+    assert predicate("language_model.model.embed_tokens", None) is False

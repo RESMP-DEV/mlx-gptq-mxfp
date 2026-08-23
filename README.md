@@ -150,6 +150,8 @@ three namespaces explicitly. Qwen3.8-27B uses:
 
 The runtime module is calibrated, weights are read from their actual raw shard
 keys, and emitted artifacts use the names expected after `mlx-lm` sanitization.
+For Qwen3.8, `mlx-lm` intentionally drops the vision tower, so the packed
+artifact is the text-generation model rather than a vision-language runtime.
 
 - **GPT-OSS**: transposed/interleaved fused checkpoint layout — not yet.
 - **FP8 checkpoints** (DeepSeek-V3/Kimi native): needs a block-dequant step in

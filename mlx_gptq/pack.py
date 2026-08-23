@@ -41,7 +41,7 @@ def make_predicate(
             return False
         if path in path_bits:
             return {"group_size": group_size, "bits": path_bits[path], "mode": mode}
-        if path == "lm_head":
+        if path == "lm_head" or path.endswith(".lm_head"):
             return (
                 {"group_size": group_size, "bits": head_bits, "mode": mode}
                 if head_bits
