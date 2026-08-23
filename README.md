@@ -152,6 +152,8 @@ The runtime module is calibrated, weights are read from their actual raw shard
 keys, and emitted artifacts use the names expected after `mlx-lm` sanitization.
 For Qwen3.8, `mlx-lm` intentionally drops the vision tower, so the packed
 artifact is the text-generation model rather than a vision-language runtime.
+Gemma 4's fused `experts.switch_glu` MLX layout is also mapped back to the
+per-expert calibration artifacts produced from routed CUDA activations.
 
 - **GPT-OSS**: transposed/interleaved fused checkpoint layout — not yet.
 - **FP8 checkpoints** (DeepSeek-V3/Kimi native): needs a block-dequant step in

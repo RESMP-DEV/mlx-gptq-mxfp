@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import torch
 
-from mlx_gptq.pack import make_predicate
+from mlx_gptq.pack import _expert_artifact, make_predicate
 from mlx_gptq.sequential import Pipeline
 
 
@@ -49,3 +49,10 @@ def test_wrapped_lm_head_stays_unquantized_by_default():
     )
     assert predicate("language_model.lm_head", None) is False
     assert predicate("language_model.model.embed_tokens", None) is False
+
+
+def test_gemma4_switch_glu_maps_to_per_expert_artifact():
+    mlx_key = "language_model.model.layers.2.experts.switch_glu.gate_proj.weight"
+    assert _expert_artifact(mlx_key, 17) == (
+        "language_model.model.layers.2.experts.17.gate_proj.weight"
+    )

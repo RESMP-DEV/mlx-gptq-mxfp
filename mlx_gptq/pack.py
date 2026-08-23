@@ -80,7 +80,11 @@ def overrides_from_manifest(reader: ArtifactReader):
 
 def _expert_artifact(mlx_key: str, e: int) -> str:
     # model.layers.L.mlp.switch_mlp.gate_proj.weight -> ...mlp.experts.{e}.gate_proj.weight
-    return mlx_key.replace(".switch_mlp.", f".experts.{e}.")
+    if ".switch_mlp." in mlx_key:
+        return mlx_key.replace(".switch_mlp.", f".experts.{e}.")
+    if ".experts.switch_glu." in mlx_key:
+        return mlx_key.replace(".experts.switch_glu.", f".experts.{e}.")
+    raise ValueError(f"unrecognized fused-expert MLX key: {mlx_key}")
 
 
 def inject(mlx_path: str, reader: ArtifactReader):
@@ -120,7 +124,9 @@ def inject(mlx_path: str, reader: ArtifactReader):
             s_old = weights[f"{base}.scales"]
             group_size, bits, mode = cfg_for(base)
 
-            if wq_old.ndim == 3 and ".switch_mlp." in key:
+            if wq_old.ndim == 3 and (
+                ".switch_mlp." in key or ".experts.switch_glu." in key
+            ):
                 E = wq_old.shape[0]
                 arts = [_expert_artifact(key, e) for e in range(E)]
                 if not all(reader.has(a) for a in arts):
