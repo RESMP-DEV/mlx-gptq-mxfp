@@ -131,13 +131,25 @@ controls without dequantizing or requantizing either source.
 
 ## Supported architectures
 
-Anything whose decoder layers live at `model.layers` (else `--layers-attr`,
-e.g. `model.language_model.layers` for ConditionalGeneration wrappers) and
-whose MoE uses the standard fused-expert pattern: Qwen3-MoE, Qwen3.5-MoE
+Anything whose decoder layers live at `model.layers` (else `--layers-attr`)
+and whose MoE uses the standard fused-expert pattern: Qwen3-MoE, Qwen3.5-MoE
 (incl. the hybrid linear-attention layers — their in/out projections are
 plain `nn.Linear` and get calibrated too), DeepSeek-V2/V3 (bf16 checkpoints),
 GLM-4.x-MoE, Mixtral, dense Llama/Qwen/etc. Both per-expert and fused raw
 checkpoint layouts materialize correctly. Known gaps:
+
+For multimodal checkpoints where `AutoModelForCausalLM` exposes a text-only
+runtime but the raw and MLX checkpoints retain wrapper prefixes, specify all
+three namespaces explicitly. Qwen3.8-27B uses:
+
+```bash
+--layers-attr model.layers \
+--checkpoint-model-prefix model.language_model \
+--artifact-layers-prefix language_model.model.layers
+```
+
+The runtime module is calibrated, weights are read from their actual raw shard
+keys, and emitted artifacts use the names expected after `mlx-lm` sanitization.
 
 - **GPT-OSS**: transposed/interleaved fused checkpoint layout — not yet.
 - **FP8 checkpoints** (DeepSeek-V3/Kimi native): needs a block-dequant step in

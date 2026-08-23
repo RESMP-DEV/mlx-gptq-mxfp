@@ -96,6 +96,22 @@ def main(argv=None):
     ap.add_argument("--vram-gb", type=float, default=16.0,
                     help="per-GPU budget for batched expert solves")
     ap.add_argument("--layers-attr", default="model.layers")
+    ap.add_argument(
+        "--checkpoint-model-prefix",
+        default=None,
+        help=(
+            "raw checkpoint prefix corresponding to the runtime model root; "
+            "e.g. model.language_model when AutoModelForCausalLM exposes model"
+        ),
+    )
+    ap.add_argument(
+        "--artifact-layers-prefix",
+        default=None,
+        help=(
+            "layer prefix expected by the packed MLX checkpoint; defaults to "
+            "--layers-attr"
+        ),
+    )
     ap.add_argument("--exclude", default=DEFAULT_EXCLUDE,
                     help="regex of layer-relative module names to leave unquantized")
     ap.add_argument("--override", action="append", metavar="REGEX=BITS",
@@ -189,6 +205,9 @@ def main(argv=None):
         "dataset": args.dataset,
         "calibration_tokens": args.calibration_tokens,
         "calibration_tokens_sha256": tokens_sha256,
+        "layers_attr": args.layers_attr,
+        "checkpoint_model_prefix": args.checkpoint_model_prefix,
+        "artifact_layers_prefix": args.artifact_layers_prefix,
     })
     reader = ArtifactReader(args.output) if writer.manifest["layers_done"] else None
 

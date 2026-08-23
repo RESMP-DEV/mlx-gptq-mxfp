@@ -219,7 +219,25 @@ class Pipeline:
             inner = getattr(inner, attr)
         self.inner = inner
         self.layers = getattr(inner, args.layers_attr.split(".")[-1])
-        self.layer_prefix_fmt = args.layers_attr + ".{}"
+        self.runtime_model_prefix = args.layers_attr.split(".", 1)[0]
+        self.checkpoint_model_prefix = (
+            args.checkpoint_model_prefix or self.runtime_model_prefix
+        )
+        self.checkpoint_layers_prefix_fmt = (
+            self._checkpoint_name(args.layers_attr) + ".{}"
+        )
+        self.artifact_layers_prefix_fmt = (
+            args.artifact_layers_prefix or args.layers_attr
+        ) + ".{}"
+
+    def _checkpoint_name(self, runtime_name: str) -> str:
+        if runtime_name == self.runtime_model_prefix:
+            return self.checkpoint_model_prefix
+        prefix = self.runtime_model_prefix + "."
+        if runtime_name.startswith(prefix):
+            suffix = runtime_name[len(self.runtime_model_prefix) :]
+            return self.checkpoint_model_prefix + suffix
+        return runtime_name
 
     # ---- initial activations -------------------------------------------------
 
@@ -234,7 +252,9 @@ class Pipeline:
             if m is emb:
                 emb_name = n
                 break
-        materialize_module(emb, emb_name, self.shards, self.dev0, self.dtype)
+        materialize_module(
+            emb, self._checkpoint_name(emb_name), self.shards, self.dev0, self.dtype
+        )
 
         store = []
         orig = self.layers[0]
@@ -278,7 +298,7 @@ class Pipeline:
 
     @torch.no_grad()
     def solve_layer(self, layer_idx: int, mgr: CaptureManager) -> SolveResult:
-        prefix = self.layer_prefix_fmt.format(layer_idx)
+        prefix = self.artifact_layers_prefix_fmt.format(layer_idx)
         result = SolveResult()
         devices = list(self.args.devices)
         dev_q: Queue = Queue()
@@ -398,7 +418,7 @@ class Pipeline:
     @torch.no_grad()
     def apply_precomputed(self, layer, layer_idx: int, reader) -> None:
         """Resume path: write dequantized artifact weights into a layer."""
-        prefix = self.layer_prefix_fmt.format(layer_idx)
+        prefix = self.artifact_layers_prefix_fmt.format(layer_idx)
         for name, mod in layer.named_modules():
             if isinstance(mod, torch.nn.Linear):
                 art = f"{prefix}.{name}.weight"
@@ -439,7 +459,7 @@ class Pipeline:
 
         for L in tqdm(range(len(self.layers)), desc="layers"):
             layer = self.layers[L]
-            prefix = self.layer_prefix_fmt.format(L)
+            prefix = self.checkpoint_layers_prefix_fmt.format(L)
             t0 = time.time()
             materialize_module(layer, prefix, self.shards, self.dev0, self.dtype)
 
