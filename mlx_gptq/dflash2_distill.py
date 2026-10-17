@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import time
 from pathlib import Path
@@ -31,10 +32,6 @@ class CycleDataset(torch.utils.data.Dataset[tuple[dict[str, torch.Tensor], int]]
         return data, prompt_index
 
 
-def _train_ids(payload: dict[str, torch.Tensor]) -> torch.Tensor:
-    return payload["target_greedy"][1:].to(torch.long)
-
-
 def _forward(model, payload, device):
     noise = payload["noise_embedding"].to(device)
     context = payload["context"].to(device)
@@ -54,8 +51,8 @@ def _forward(model, payload, device):
 
 
 def _selector_loss(model, payload, hidden, device):
-    candidate_ids = payload["target_top_ids"][:, :-1].to(device).long()
-    target_ids = payload["target_greedy"][:-1].to(device).long()[None]
+    candidate_ids = payload["target_top_ids"][1:].to(device).long()[None]
+    target_ids = payload["target_greedy"][1:].to(device).long()[None]
     projected = model.candidate_selector.hidden_projection(hidden)
     successor = model.candidate_selector.successor_codebook(candidate_ids)
     predecessor = payload["anchor"].to(device).long()
@@ -68,13 +65,13 @@ def _selector_loss(model, payload, hidden, device):
             successor[:, position],
         )
         matches = candidate_ids[:, position] == target_ids[:, position]
-        target_index = matches.nonzero().mT
+        target_index = matches.to(torch.int8).argmax(dim=1)
         if target_index.numel() != candidate_ids.shape[0]:
             raise RuntimeError("teacher greedy token is absent from its top-k set")
         losses.append(
             F.cross_entropy(
                 edge.float(),
-                target_index[:, 1],
+                target_index,
             )
         )
         predecessor = target_ids[:, position]
@@ -84,6 +81,13 @@ def _selector_loss(model, payload, hidden, device):
 def run(args):
     device = args.device
     model = _load_reference(args.model, args.dflash_package, device)
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    selector = model.candidate_selector.hidden_projection
+    selector.weight = torch.nn.Parameter(
+        selector.weight.detach().float(), requires_grad=True
+    )
+    projection = selector.weight
     dataset = CycleDataset(Path(args.capture_dir), args.limit)
     if not dataset:
         raise RuntimeError("empty capture")
@@ -93,35 +97,43 @@ def run(args):
     val_ids = set(ids[:split])
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
-    trainable = [
-        value
-        for name, value in model.named_parameters()
-        if name == "candidate_selector.hidden_projection.weight"
-    ]
+    trainable = [projection]
     optimizer = torch.optim.AdamW(trainable, lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=max(1, args.epochs * (len(dataset) - len(val_ids)))
     )
-    scaler = torch.amp.GradScaler("cuda", enabled=device.startswith("cuda"))
-    best = math.inf
-    history = []
+    checkpoint_path = output / "checkpoint.pt"
+    start_epoch = 0
     step = 0
+    best = math.inf
+    best_projection = projection.detach().cpu().clone()
+    history = []
+    if args.resume and checkpoint_path.is_file():
+        checkpoint = torch.load(
+            checkpoint_path, map_location=device, weights_only=False
+        )
+        projection.data.copy_(checkpoint["projection"].to(device))
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        scheduler.load_state_dict(checkpoint["scheduler"])
+        start_epoch = int(checkpoint["next_epoch"])
+        step = int(checkpoint["step"])
+        best = float(checkpoint["best"])
+        best_projection = checkpoint["best_projection"].cpu()
+        history = list(checkpoint["history"])
+        print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
     started = time.time()
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         order = [i for i in ids if i not in val_ids]
         random.Random(args.seed + epoch).shuffle(order)
-        model.train()
         for index in order:
             payload, _ = dataset[index]
             with torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16):
                 hidden = _forward(model, payload, device)
                 loss = _selector_loss(model, payload, hidden, device)
             optimizer.zero_grad(set_to_none=True)
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
+            loss.backward()
             torch.nn.utils.clip_grad_norm_(trainable, args.max_grad_norm)
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
             scheduler.step()
             step += 1
             if step % args.log_every == 0:
@@ -146,10 +158,28 @@ def run(args):
         history.append({"epoch": epoch, "validation": validation})
         if validation < best:
             best = validation
-            save_file(
-                model.state_dict(),
-                str(output / "model.safetensors"),
-            )
+            best_projection = projection.detach().cpu().clone()
+        temporary_checkpoint = checkpoint_path.with_suffix(".pt.tmp")
+        torch.save(
+            {
+                "projection": projection.detach().cpu(),
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "next_epoch": epoch + 1,
+                "step": step,
+                "best": best,
+                "best_projection": best_projection,
+                "history": history,
+            },
+            temporary_checkpoint,
+        )
+        os.replace(temporary_checkpoint, checkpoint_path)
+    projection.data.copy_(best_projection.to(device))
+    save_file(
+        {"weight": projection.detach().cpu().contiguous()},
+        str(output / "distilled_hidden_projection.safetensors"),
+    )
+    save_file(model.state_dict(), str(output / "model.safetensors"))
     receipt = {
         "schema_version": 1,
         "cycles": len(dataset),
@@ -188,6 +218,7 @@ def main():
     parser.add_argument("--validation-fraction", type=float, default=0.05)
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--log-every", type=int, default=32)
+    parser.add_argument("--no-resume", action="store_false", dest="resume")
     args = parser.parse_args()
     run(args)
 
