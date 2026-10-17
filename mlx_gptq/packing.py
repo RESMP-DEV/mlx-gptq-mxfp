@@ -26,6 +26,11 @@ def pack_q(q: np.ndarray, bits: int) -> np.ndarray:
     return words
 
 
+def pack_mxfp4(q: np.ndarray) -> np.ndarray:
+    """Pack uint8 E2M1 codes into the native MLX MXFP4 uint32 layout."""
+    return pack_q(q, 4)
+
+
 def unpack_q(words: np.ndarray, bits: int, out_cols: int) -> np.ndarray:
     per = 32 // bits
     mask = (1 << bits) - 1
