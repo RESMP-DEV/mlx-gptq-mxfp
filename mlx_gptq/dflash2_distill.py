@@ -33,6 +33,8 @@ class CycleDataset(torch.utils.data.Dataset[tuple[dict[str, torch.Tensor], int]]
 
 
 def _forward(model, payload, device):
+    if "selector_hidden" in payload:
+        return payload["selector_hidden"].to(device)
     noise = payload["noise_embedding"].to(device)
     context = payload["context"].to(device)
     position_ids = torch.arange(
@@ -91,6 +93,14 @@ def run(args):
         selector.weight.detach().float(), requires_grad=True
     )
     projection = selector.weight
+    if args.initial_projection:
+        initial = load_file(args.initial_projection)["weight"]
+        if tuple(initial.shape) != tuple(projection.shape):
+            raise ValueError(
+                f"initial projection shape {tuple(initial.shape)} does not match "
+                f"{tuple(projection.shape)}"
+            )
+        projection.data.copy_(initial.to(device).float())
     dataset = CycleDataset(Path(args.capture_dir), args.limit)
     if not dataset:
         raise RuntimeError("empty capture")
@@ -192,6 +202,7 @@ def run(args):
         "steps": step,
         "elapsed_seconds": time.time() - started,
         "device": device,
+        "initial_projection": args.initial_projection,
         "history": history,
         "objective": (
             "Teacher-greedy cross-entropy over target top-k unary-plus-edge scores"
@@ -214,6 +225,7 @@ def main():
     parser.add_argument("--capture-dir", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--dflash-package", default="/home/kearm/dflash-pytorch")
+    parser.add_argument("--initial-projection")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--limit", type=int, default=0)
