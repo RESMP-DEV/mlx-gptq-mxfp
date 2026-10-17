@@ -52,7 +52,7 @@ def _forward(model, payload, device):
     return model.norm(hidden)[:, 1:, :]
 
 
-def _selector_loss(model, payload, hidden, device):
+def _selector_loss(model, payload, hidden, device, reduction="mean"):
     top_k = int(model.candidate_selector.top_k)
     candidate_ids = payload["target_top_ids"][1:].to(device).long()[None, :, :top_k]
     unary = payload["target_top_values"][1:].to(device).float()[None, :, :top_k]
@@ -80,7 +80,8 @@ def _selector_loss(model, payload, hidden, device):
             )
         )
         predecessor = target_ids[:, position]
-    return torch.stack(losses).mean()
+    losses = torch.stack(losses)
+    return losses.mean() if reduction == "mean" else losses.sum()
 
 
 def run(args):
@@ -142,7 +143,9 @@ def run(args):
             payload, _ = dataset[index]
             with torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16):
                 hidden = _forward(model, payload, device)
-                loss = _selector_loss(model, payload, hidden, device)
+                loss = _selector_loss(
+                    model, payload, hidden, device, args.loss_reduction
+                )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(trainable, args.max_grad_norm)
@@ -163,7 +166,9 @@ def run(args):
             for index in sorted(val_ids):
                 payload, _ = dataset[index]
                 hidden = _forward(model, payload, device)
-                loss = _selector_loss(model, payload, hidden, device)
+                loss = _selector_loss(
+                    model, payload, hidden, device, args.loss_reduction
+                )
                 total += float(loss)
                 count += 1
         validation = total / max(1, count)
@@ -203,6 +208,7 @@ def run(args):
         "elapsed_seconds": time.time() - started,
         "device": device,
         "initial_projection": args.initial_projection,
+        "loss_reduction": args.loss_reduction,
         "history": history,
         "objective": (
             "Teacher-greedy cross-entropy over target top-k unary-plus-edge scores"
@@ -226,6 +232,7 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--dflash-package", default="/home/kearm/dflash-pytorch")
     parser.add_argument("--initial-projection")
+    parser.add_argument("--loss-reduction", choices=("mean", "sum"), default="mean")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--limit", type=int, default=0)

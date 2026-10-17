@@ -34,11 +34,14 @@ def test_selector_loss_includes_target_unary_scores():
     payload = _payload()
     hidden = torch.zeros(1, 2, 4)
     weak_teacher = _selector_loss(model, payload, hidden, "cpu")
+    sequence_loss = _selector_loss(model, payload, hidden, "cpu", reduction="sum")
 
     payload["target_top_values"][-1] = torch.tensor([-8.0, 8.0, 0.0])
     strong_teacher = _selector_loss(model, payload, hidden, "cpu")
 
     assert torch.isfinite(weak_teacher)
+    assert torch.isfinite(sequence_loss)
+    assert sequence_loss.detach().item() > weak_teacher.detach().item()
     assert torch.isfinite(strong_teacher)
     assert strong_teacher.detach().item() < weak_teacher.detach().item()
 
