@@ -51,7 +51,9 @@ def _forward(model, payload, device):
 
 
 def _selector_loss(model, payload, hidden, device):
-    candidate_ids = payload["target_top_ids"][1:].to(device).long()[None]
+    top_k = int(model.candidate_selector.top_k)
+    candidate_ids = payload["target_top_ids"][1:].to(device).long()[None, :, :top_k]
+    unary = payload["target_top_values"][1:].to(device).float()[None, :, :top_k]
     target_ids = payload["target_greedy"][1:].to(device).long()[None]
     projected = model.candidate_selector.hidden_projection(hidden)
     successor = model.candidate_selector.successor_codebook(candidate_ids)
@@ -65,12 +67,13 @@ def _selector_loss(model, payload, hidden, device):
             successor[:, position],
         )
         matches = candidate_ids[:, position] == target_ids[:, position]
+        if not bool(matches.any(dim=1).item()):
+            raise RuntimeError("teacher greedy token is absent from its selector set")
         target_index = matches.to(torch.int8).argmax(dim=1)
-        if target_index.numel() != candidate_ids.shape[0]:
-            raise RuntimeError("teacher greedy token is absent from its top-k set")
+        scores = edge.float() + unary[:, position]
         losses.append(
             F.cross_entropy(
-                edge.float(),
+                scores,
                 target_index,
             )
         )
@@ -190,7 +193,9 @@ def run(args):
         "elapsed_seconds": time.time() - started,
         "device": device,
         "history": history,
-        "objective": "Teacher-greedy cross-entropy over target top-64 selector edges",
+        "objective": (
+            "Teacher-greedy cross-entropy over target top-k unary-plus-edge scores"
+        ),
         "non_claims": [
             "Validation is reconstruction loss on captured cycles, not live acceptance.",
             "The transformer, target projection, and selector codebooks are frozen.",
