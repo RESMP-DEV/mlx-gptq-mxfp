@@ -114,6 +114,10 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
     trial.set_user_attr("validation_prompts", receipt["validation_prompts"])
     trial.set_user_attr("prompt_count", receipt["prompt_count"])
     trial.set_user_attr("epochs", receipt["epochs"])
+    if args.wandb_project and (output / "wandb").is_dir():
+        preserved = args.study_dir / "wandb" / f"trial-{trial.number:02d}"
+        preserved.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(output / "wandb"), str(preserved))
     shutil.rmtree(output)
     return result
 
