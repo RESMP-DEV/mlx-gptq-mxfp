@@ -44,7 +44,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
         "--lora-alpha",
         str(rank * alpha_ratio),
         "--device",
-        args.device,
+        "cuda:0",
         "--epochs",
         "1",
         "--limit",
@@ -69,6 +69,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
     env = os.environ.copy()
     env.update(
         {
+            # Keep the physical GPU in CUDA_VISIBLE_DEVICES and use ordinal zero.
             "CUDA_VISIBLE_DEVICES": args.gpu,
             "HF_HUB_OFFLINE": "1",
             "TOKENIZERS_PARALLELISM": "false",
