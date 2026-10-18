@@ -173,6 +173,14 @@ def _merge_lora(model: torch.nn.Module) -> None:
             module.base.weight.add_(module.b @ module.a * module.scaling)
 
 
+def _remove_lora(model: torch.nn.Module) -> None:
+    for name, child in list(model.named_children()):
+        if isinstance(child, LoRALinear):
+            setattr(model, name, child.base)
+        else:
+            _remove_lora(child)
+
+
 def _selector_loss(model, payload, hidden, device, reduction="mean"):
     top_k = int(model.candidate_selector.top_k)
     candidate_ids = payload["target_top_ids"][1:].to(device).long()[None, :, :top_k]
@@ -336,6 +344,7 @@ def run(args):
             str(output / "lora_adapters.safetensors"),
         )
         _merge_lora(model)
+        _remove_lora(model)
     save_file(model.state_dict(), str(output / "model.safetensors"))
     receipt = {
         "schema_version": 1,

@@ -5,7 +5,9 @@ from mlx_gptq.dflash2_distill import (
     LoRALinear,
     _forward,
     _install_lora,
+    _merge_lora,
     _prompt_split,
+    _remove_lora,
     _selector_loss,
 )
 
@@ -144,3 +146,21 @@ def test_prompt_split_never_leaks_a_prompt():
     assert train_prompts.isdisjoint(validation_prompts)
     assert set(validation_prompts) == {prompt_ids[index] for index in validation}
     assert len(train) + len(validation) == len(prompt_ids)
+
+
+def test_merge_and_remove_lora_exports_original_keys():
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc = torch.nn.Linear(4, 3, bias=False)
+
+    model = Model()
+    expected_keys = set(model.state_dict())
+    _install_lora(model, rank=2, alpha=4.0)
+    with torch.no_grad():
+        model.fc.b[:, 0] = 0.125
+    _merge_lora(model)
+    _remove_lora(model)
+
+    assert set(model.state_dict()) == expected_keys
+    assert isinstance(model.fc, torch.nn.Linear)
