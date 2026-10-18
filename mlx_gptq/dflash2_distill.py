@@ -20,16 +20,42 @@ from .dflash2_calibrate import _cycle_paths, _load_reference
 class CycleDataset(torch.utils.data.Dataset[tuple[dict[str, torch.Tensor], int]]):
     def __init__(self, root: Path, limit: int = 0):
         self.paths = _cycle_paths(root)
+        index = json.loads((root / "index.json").read_text(encoding="utf-8"))
+        self.prompt_ids = [int(record["prompt_index"]) for record in index["cycles"]]
+        if len(self.prompt_ids) != len(self.paths):
+            raise ValueError("capture cycle and prompt-index counts do not match")
         if limit:
             self.paths = self.paths[:limit]
+            self.prompt_ids = self.prompt_ids[:limit]
 
     def __len__(self) -> int:
         return len(self.paths)
 
     def __getitem__(self, index: int) -> tuple[dict[str, torch.Tensor], int]:
         data = load_file(str(self.paths[index]))
-        prompt_index = 0
-        return data, prompt_index
+        return data, self.prompt_ids[index]
+
+
+def _prompt_split(
+    prompt_ids: list[int], fraction: float, seed: int
+) -> tuple[list[int], list[int], set[int]]:
+    unique = sorted(set(prompt_ids))
+    random.Random(seed).shuffle(unique)
+    count = max(1, int(len(unique) * fraction))
+    if count >= len(unique):
+        raise ValueError("capture has too few prompts for a held-out split")
+    validation_prompts = set(unique[:count])
+    train = [
+        index
+        for index, prompt in enumerate(prompt_ids)
+        if prompt not in validation_prompts
+    ]
+    validation = [
+        index for index, prompt in enumerate(prompt_ids) if prompt in validation_prompts
+    ]
+    if not train or not validation:
+        raise ValueError("prompt split produced an empty side")
+    return train, validation, validation_prompts
 
 
 class LoRALinear(torch.nn.Module):
@@ -208,16 +234,15 @@ def run(args):
     dataset = CycleDataset(Path(args.capture_dir), args.limit)
     if not dataset:
         raise RuntimeError("empty capture")
-    ids = list(range(len(dataset)))
-    random.Random(args.seed).shuffle(ids)
-    split = max(1, int(len(ids) * args.validation_fraction))
-    val_ids = set(ids[:split])
+    ids, validation_ids, validation_prompts = _prompt_split(
+        dataset.prompt_ids, args.validation_fraction, args.seed
+    )
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     trainable = _trainable_parameters(model)
     optimizer = torch.optim.AdamW(trainable, lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=max(1, args.epochs * (len(dataset) - len(val_ids)))
+        optimizer, T_max=max(1, args.epochs * len(ids))
     )
     checkpoint_path = output / "checkpoint.pt"
     start_epoch = 0
@@ -244,7 +269,7 @@ def run(args):
         print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
     started = time.time()
     for epoch in range(start_epoch, args.epochs):
-        order = [i for i in ids if i not in val_ids]
+        order = list(ids)
         random.Random(args.seed + epoch).shuffle(order)
         for index in order:
             payload, _ = dataset[index]
@@ -270,7 +295,7 @@ def run(args):
             torch.no_grad(),
             torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16),
         ):
-            for index in sorted(val_ids):
+            for index in sorted(validation_ids):
                 payload, _ = dataset[index]
                 hidden = _forward(model, payload, device)
                 loss = _selector_loss(
@@ -315,7 +340,8 @@ def run(args):
     receipt = {
         "schema_version": 1,
         "cycles": len(dataset),
-        "validation_cycles": len(val_ids),
+        "validation_cycles": len(validation_ids),
+        "validation_prompts": sorted(validation_prompts),
         "epochs": args.epochs,
         "best_validation": best,
         "steps": step,

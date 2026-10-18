@@ -1,7 +1,13 @@
 import pytest
 import torch
 
-from mlx_gptq.dflash2_distill import LoRALinear, _forward, _install_lora, _selector_loss
+from mlx_gptq.dflash2_distill import (
+    LoRALinear,
+    _forward,
+    _install_lora,
+    _prompt_split,
+    _selector_loss,
+)
 
 
 class _Selector:
@@ -126,3 +132,15 @@ def test_forward_falls_back_when_raw_context_is_incomplete():
     output = _forward(Model(), payload, "cpu")
 
     assert output.shape == (1, 1, 4)
+
+
+def test_prompt_split_never_leaks_a_prompt():
+    prompt_ids = [0, 0, 1, 1, 2, 2, 3, 3]
+    train, validation, validation_prompts = _prompt_split(
+        prompt_ids, fraction=0.25, seed=17
+    )
+
+    train_prompts = {prompt_ids[index] for index in train}
+    assert train_prompts.isdisjoint(validation_prompts)
+    assert set(validation_prompts) == {prompt_ids[index] for index in validation}
+    assert len(train) + len(validation) == len(prompt_ids)
