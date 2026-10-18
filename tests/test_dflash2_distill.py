@@ -2,6 +2,7 @@ import pytest
 import torch
 from mlx_gptq.dflash2_distill import (
     LoRALinear,
+    _flat_metrics,
     _forward,
     _install_lora,
     _merge_lora,
@@ -100,6 +101,19 @@ def test_stratified_limit_keeps_prompt_coverage_and_counts():
         counts[prompt_ids[index]] += 1
     assert counts[0] > counts[1]
     assert counts[1] >= counts[2]
+
+
+def test_flat_metrics_names_prompt_and_global_values():
+    metrics = {
+        "loss": 1.5,
+        "by_prompt": {"6": {"prefix_accuracy": 0.75, "loss": 1.25}},
+    }
+
+    assert _flat_metrics("validation", metrics) == {
+        "validation/loss": 1.5,
+        "validation/by_prompt/6/prefix_accuracy": 0.75,
+        "validation/by_prompt/6/loss": 1.25,
+    }
 
 
 def test_lora_linear_starts_equivalent_and_receives_gradients():

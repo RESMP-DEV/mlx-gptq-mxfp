@@ -349,6 +349,38 @@ def _evaluate_cycles(
     return result
 
 
+def _flat_metrics(prefix: str, metrics: dict[str, object]) -> dict[str, float]:
+    result: dict[str, float] = {}
+    for name, value in metrics.items():
+        if isinstance(value, dict):
+            result.update(_flat_metrics(f"{prefix}/{name}", value))
+        else:
+            result[f"{prefix}/{name}"] = float(value)
+    return result
+
+
+def _start_wandb(args: argparse.Namespace, output: Path):
+    if args.wandb_mode == "disabled":
+        return None
+    try:
+        import wandb
+    except ImportError as error:
+        raise RuntimeError(
+            "--wandb-mode is enabled but the wandb package is unavailable"
+        ) from error
+    return wandb.init(
+        project=args.wandb_project,
+        name=args.wandb_name,
+        mode=args.wandb_mode,
+        dir=str(output),
+        tags=[item for item in args.wandb_tags.split(",") if item],
+        config={
+            key: str(value) if isinstance(value, Path) else value
+            for key, value in vars(args).items()
+        },
+    )
+
+
 def run(args):
     device = args.device
     torch.manual_seed(args.seed)
@@ -386,6 +418,7 @@ def run(args):
     )
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
+    wandb_run = _start_wandb(args, output)
     trainable = _trainable_parameters(model)
     optimizer = torch.optim.AdamW(trainable, lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -431,6 +464,8 @@ def run(args):
         )
         best_parameters = _parameter_snapshot(model)
         history.append({"epoch": -1, "validation": best})
+        if wandb_run is not None:
+            wandb_run.log({"epoch": -1, **_flat_metrics("validation", initial_metrics)})
     for epoch in range(start_epoch, args.epochs):
         order = list(ids)
         random.Random(args.seed + epoch).shuffle(order)
@@ -448,10 +483,20 @@ def run(args):
                 )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(trainable, args.max_grad_norm)
+            grad_norm = torch.nn.utils.clip_grad_norm_(trainable, args.max_grad_norm)
             optimizer.step()
             scheduler.step()
             step += 1
+            if wandb_run is not None and step % args.wandb_log_every == 0:
+                wandb_run.log(
+                    {
+                        "epoch": epoch,
+                        "step": step,
+                        "train/loss": float(loss.detach()),
+                        "train/grad_norm": float(grad_norm.detach()),
+                        "train/learning_rate": float(optimizer.param_groups[0]["lr"]),
+                    }
+                )
             if step % args.log_every == 0:
                 history.append({"step": step, "loss": float(loss.detach())})
                 print(json.dumps(history[-1]), flush=True)
@@ -473,6 +518,9 @@ def run(args):
             {"epoch": epoch, "validation": validation, **validation_metrics}, flush=True
         )
         history.append({"epoch": epoch, "validation": validation})
+        if wandb_run is not None:
+            validation_flat = _flat_metrics("validation", validation_metrics)
+            wandb_run.log({"epoch": epoch, "step": step, **validation_flat})
         if validation < best:
             best = validation
             best_parameters = _parameter_snapshot(model)
@@ -529,6 +577,17 @@ def run(args):
         "loss_reduction": args.loss_reduction,
         "history": history,
         "initial_metrics": initial_metrics,
+        "wandb": (
+            None
+            if wandb_run is None
+            else {
+                "mode": args.wandb_mode,
+                "project": args.wandb_project,
+                "name": wandb_run.name,
+                "id": wandb_run.id,
+                "dir": str(wandb_run.dir),
+            }
+        ),
         "objective": (
             "Teacher-greedy cross-entropy over target top-k unary-plus-edge scores"
         ),
@@ -542,6 +601,9 @@ def run(args):
         json.dumps(receipt, indent=2) + "\n", encoding="utf-8"
     )
     print(json.dumps(receipt, indent=2))
+    if wandb_run is not None:
+        wandb_run.log({"final/elapsed_seconds": time.time() - started})
+        wandb_run.finish()
 
 
 def main():
@@ -571,6 +633,13 @@ def main():
     )
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--log-every", type=int, default=32)
+    parser.add_argument(
+        "--wandb-mode", choices=("disabled", "offline"), default="disabled"
+    )
+    parser.add_argument("--wandb-project", default="dflash2-distillation")
+    parser.add_argument("--wandb-name")
+    parser.add_argument("--wandb-tags", default="")
+    parser.add_argument("--wandb-log-every", type=int, default=1)
     parser.add_argument("--no-resume", action="store_false", dest="resume")
     args = parser.parse_args()
     run(args)
