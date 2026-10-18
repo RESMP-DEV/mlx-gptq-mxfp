@@ -32,11 +32,40 @@ class CycleDataset(torch.utils.data.Dataset[tuple[dict[str, torch.Tensor], int]]
         return data, prompt_index
 
 
+class LoRALinear(torch.nn.Module):
+    def __init__(self, base: torch.nn.Linear, rank: int, alpha: float):
+        super().__init__()
+        if rank <= 0:
+            raise ValueError("LoRA rank must be positive")
+        if base.bias is not None:
+            raise ValueError("DFlash2 LoRA requires a bias-free linear layer")
+        self.base = base
+        self.rank = int(rank)
+        self.scaling = float(alpha) / float(rank)
+        self.a = torch.nn.Parameter(
+            torch.empty(rank, base.in_features, device=base.weight.device)
+        )
+        self.b = torch.nn.Parameter(
+            torch.empty(base.out_features, rank, device=base.weight.device)
+        )
+        torch.nn.init.kaiming_uniform_(self.a, a=5**0.5)
+        torch.nn.init.zeros_(self.b)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        delta = torch.nn.functional.linear(input, self.b @ self.a)
+        return self.base(input) + delta * self.scaling
+
+
 def _forward(model, payload, device):
     if "selector_hidden" in payload:
         return payload["selector_hidden"].to(device)
     noise = payload["noise_embedding"].to(device)
-    context = payload["context"].to(device)
+    raw_context = payload.get("raw_context")
+    context = (
+        model.hidden_norm(model.fc(raw_context.to(device)))
+        if raw_context is not None
+        else payload["context"].to(device)
+    )
     position_ids = torch.arange(
         context.shape[1] + noise.shape[1], device=device
     ).unsqueeze(0)
@@ -50,6 +79,67 @@ def _forward(model, payload, device):
             position_embeddings=position_embeddings,
         )
     return model.norm(hidden)[:, 1:, :]
+
+
+def _install_lora(model: torch.nn.Module, rank: int, alpha: float) -> tuple[int, int]:
+    pending: list[tuple[str, torch.nn.Module]] = [("", model)]
+    installed = 0
+    trainable = 0
+    visited: set[int] = set()
+    while pending:
+        prefix, parent = pending.pop()
+        if id(parent) in visited:
+            continue
+        visited.add(id(parent))
+        for name, child in list(parent.named_children()):
+            path = f"{prefix}{name}"
+            if path.endswith("candidate_selector.hidden_projection"):
+                continue
+            if not isinstance(child, torch.nn.Linear):
+                pending.append((f"{path}.", child))
+                continue
+            adapter = LoRALinear(child, rank, alpha)
+            setattr(parent, name, adapter)
+            installed += 1
+            trainable += adapter.a.numel() + adapter.b.numel()
+    return installed, trainable
+
+
+def _trainable_parameters(model: torch.nn.Module) -> list[torch.nn.Parameter]:
+    return [parameter for parameter in model.parameters() if parameter.requires_grad]
+
+
+def _parameter_snapshot(model: torch.nn.Module) -> dict[str, torch.Tensor]:
+    return {
+        name: parameter.detach().cpu().clone()
+        for name, parameter in model.named_parameters()
+        if parameter.requires_grad
+    }
+
+
+def _restore_parameters(model: torch.nn.Module, best: dict[str, torch.Tensor]) -> None:
+    parameters = dict(model.named_parameters())
+    with torch.no_grad():
+        for name, value in best.items():
+            parameters[name].copy_(value.to(parameters[name].device))
+
+
+def _lora_parameters(model: torch.nn.Module) -> dict[str, torch.Tensor]:
+    result: dict[str, torch.Tensor] = {}
+    for name, module in model.named_modules():
+        if isinstance(module, LoRALinear):
+            result[f"{name}.a"] = module.a.detach().cpu().contiguous()
+            result[f"{name}.b"] = module.b.detach().cpu().contiguous()
+            result[f"{name}.scaling"] = torch.tensor([module.scaling])
+    return result
+
+
+def _merge_lora(model: torch.nn.Module) -> None:
+    with torch.no_grad():
+        for module in [
+            item for item in model.modules() if isinstance(item, LoRALinear)
+        ]:
+            module.base.weight.add_(module.b @ module.a * module.scaling)
 
 
 def _selector_loss(model, payload, hidden, device, reduction="mean"):
@@ -89,6 +179,14 @@ def run(args):
     model = _load_reference(args.model, args.dflash_package, device)
     for parameter in model.parameters():
         parameter.requires_grad_(False)
+    if args.mode == "lora":
+        adapter_modules, adapter_parameters = _install_lora(
+            model, args.lora_rank, args.lora_alpha
+        )
+    else:
+        adapter_modules = 0
+        adapter_parameters = 0
+
     selector = model.candidate_selector.hidden_projection
     selector.weight = torch.nn.Parameter(
         selector.weight.detach().float(), requires_grad=True
@@ -111,7 +209,7 @@ def run(args):
     val_ids = set(ids[:split])
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
-    trainable = [projection]
+    trainable = _trainable_parameters(model)
     optimizer = torch.optim.AdamW(trainable, lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=max(1, args.epochs * (len(dataset) - len(val_ids)))
@@ -120,19 +218,23 @@ def run(args):
     start_epoch = 0
     step = 0
     best = math.inf
-    best_projection = projection.detach().cpu().clone()
+    best_parameters = _parameter_snapshot(model)
     history = []
     if args.resume and checkpoint_path.is_file():
         checkpoint = torch.load(
             checkpoint_path, map_location=device, weights_only=False
         )
         projection.data.copy_(checkpoint["projection"].to(device))
+        parameters = dict(model.named_parameters())
+        with torch.no_grad():
+            for name, value in checkpoint["current_parameters"].items():
+                parameters[name].copy_(value.to(device))
         optimizer.load_state_dict(checkpoint["optimizer"])
         scheduler.load_state_dict(checkpoint["scheduler"])
         start_epoch = int(checkpoint["next_epoch"])
         step = int(checkpoint["step"])
         best = float(checkpoint["best"])
-        best_projection = checkpoint["best_projection"].cpu()
+        best_parameters = checkpoint["best_parameters"]
         history = list(checkpoint["history"])
         print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
     started = time.time()
@@ -176,27 +278,34 @@ def run(args):
         history.append({"epoch": epoch, "validation": validation})
         if validation < best:
             best = validation
-            best_projection = projection.detach().cpu().clone()
+            best_parameters = _parameter_snapshot(model)
         temporary_checkpoint = checkpoint_path.with_suffix(".pt.tmp")
         torch.save(
             {
                 "projection": projection.detach().cpu(),
+                "current_parameters": _parameter_snapshot(model),
                 "optimizer": optimizer.state_dict(),
                 "scheduler": scheduler.state_dict(),
                 "next_epoch": epoch + 1,
                 "step": step,
                 "best": best,
-                "best_projection": best_projection,
+                "best_parameters": best_parameters,
                 "history": history,
             },
             temporary_checkpoint,
         )
         os.replace(temporary_checkpoint, checkpoint_path)
-    projection.data.copy_(best_projection.to(device))
+    _restore_parameters(model, best_parameters)
     save_file(
-        {"weight": projection.detach().cpu().contiguous()},
+        {"weight": selector.weight.detach().cpu().contiguous()},
         str(output / "distilled_hidden_projection.safetensors"),
     )
+    if args.mode == "lora":
+        save_file(
+            _lora_parameters(model),
+            str(output / "lora_adapters.safetensors"),
+        )
+        _merge_lora(model)
     save_file(model.state_dict(), str(output / "model.safetensors"))
     receipt = {
         "schema_version": 1,
@@ -208,6 +317,11 @@ def run(args):
         "elapsed_seconds": time.time() - started,
         "device": device,
         "initial_projection": args.initial_projection,
+        "mode": args.mode,
+        "lora_rank": args.lora_rank if args.mode == "lora" else None,
+        "lora_alpha": args.lora_alpha if args.mode == "lora" else None,
+        "lora_modules": adapter_modules,
+        "trainable_parameters": adapter_parameters + selector.weight.numel(),
         "loss_reduction": args.loss_reduction,
         "history": history,
         "objective": (
@@ -215,7 +329,7 @@ def run(args):
         ),
         "non_claims": [
             "Validation is reconstruction loss on captured cycles, not live acceptance.",
-            "The transformer, target projection, and selector codebooks are frozen.",
+            "Selector codebooks and modules without an adapter remain frozen.",
             "The saved state is a PyTorch training checkpoint, not an MLX artifact.",
         ],
     }
@@ -232,6 +346,9 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--dflash-package", default="/home/kearm/dflash-pytorch")
     parser.add_argument("--initial-projection")
+    parser.add_argument("--mode", choices=("selector", "lora"), default="selector")
+    parser.add_argument("--lora-rank", type=int, default=32)
+    parser.add_argument("--lora-alpha", type=float, default=64.0)
     parser.add_argument("--loss-reduction", choices=("mean", "sum"), default="mean")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--epochs", type=int, default=2)

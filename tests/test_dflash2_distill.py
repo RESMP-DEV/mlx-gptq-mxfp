@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from mlx_gptq.dflash2_distill import _selector_loss
+from mlx_gptq.dflash2_distill import LoRALinear, _install_lora, _selector_loss
 
 
 class _Selector:
@@ -54,3 +54,46 @@ def test_selector_loss_rejects_missing_teacher():
 
     with pytest.raises(RuntimeError, match="absent from its selector set"):
         _selector_loss(model, payload, hidden, "cpu")
+
+
+def test_lora_linear_starts_equivalent_and_receives_gradients():
+    base = torch.nn.Linear(4, 3, bias=False)
+    module = LoRALinear(base, rank=2, alpha=4.0)
+    input = torch.randn(2, 4, requires_grad=True)
+
+    expected = base(input)
+    actual = module(input)
+    actual.sum().backward()
+
+    assert torch.allclose(actual, expected)
+    assert module.a.grad is not None
+    assert module.b.grad is not None
+    assert input.grad is not None
+
+
+def test_install_lora_wraps_draft_linears_but_not_selector_projection():
+    class Selector(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.hidden_projection = torch.nn.Linear(4, 2, bias=False)
+
+    class Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.q_proj = torch.nn.Linear(4, 4, bias=False)
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc = torch.nn.Linear(6, 4, bias=False)
+            self.layers = torch.nn.ModuleList([Layer()])
+            self.candidate_selector = Selector()
+
+    model = Model()
+    modules, parameters = _install_lora(model, rank=2, alpha=4.0)
+
+    assert modules == 2
+    assert parameters == 2 * (6 + 4) + 2 * (4 + 4)
+    assert isinstance(model.fc, LoRALinear)
+    assert isinstance(model.layers[0].q_proj, LoRALinear)
+    assert not isinstance(model.candidate_selector.hidden_projection, LoRALinear)
