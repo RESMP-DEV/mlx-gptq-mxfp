@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from mlx_gptq.dflash2_distill import LoRALinear, _install_lora, _selector_loss
+from mlx_gptq.dflash2_distill import LoRALinear, _forward, _install_lora, _selector_loss
 
 
 class _Selector:
@@ -97,3 +97,32 @@ def test_install_lora_wraps_draft_linears_but_not_selector_projection():
     assert isinstance(model.fc, LoRALinear)
     assert isinstance(model.layers[0].q_proj, LoRALinear)
     assert not isinstance(model.candidate_selector.hidden_projection, LoRALinear)
+
+
+def test_forward_falls_back_when_raw_context_is_incomplete():
+    class Rotary:
+        def __call__(self, noise, position_ids):
+            return torch.zeros_like(noise), torch.zeros_like(noise)
+
+    class Layer(torch.nn.Module):
+        def forward(self, hidden_states, target_hidden, **_):
+            assert target_hidden.shape[1] == 3
+            return hidden_states
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc = torch.nn.Linear(8, 4, bias=False)
+            self.hidden_norm = torch.nn.LayerNorm(4)
+            self.rotary_emb = Rotary()
+            self.layers = [Layer()]
+            self.norm = torch.nn.Identity()
+
+    payload = {
+        "context": torch.randn(1, 3, 4),
+        "raw_context": torch.randn(1, 1, 8),
+        "noise_embedding": torch.randn(1, 2, 4),
+    }
+    output = _forward(Model(), payload, "cpu")
+
+    assert output.shape == (1, 1, 4)

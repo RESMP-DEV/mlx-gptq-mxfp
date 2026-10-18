@@ -61,10 +61,13 @@ def _forward(model, payload, device):
         return payload["selector_hidden"].to(device)
     noise = payload["noise_embedding"].to(device)
     raw_context = payload.get("raw_context")
+    projected_context = payload["context"].to(device)
     context = (
         model.hidden_norm(model.fc(raw_context.to(device)))
         if raw_context is not None
-        else payload["context"].to(device)
+        and raw_context.shape[1] == projected_context.shape[1]
+        and raw_context.shape[-1] == model.fc.in_features
+        else projected_context
     )
     position_ids = torch.arange(
         context.shape[1] + noise.shape[1], device=device
