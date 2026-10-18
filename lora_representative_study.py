@@ -33,7 +33,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
         "--model",
         str(args.model),
         "--capture-dir",
-        str(args.root / "capture"),
+        str(args.capture_dir),
         "--output",
         str(output),
         "--dflash-package",
@@ -138,6 +138,7 @@ def main() -> None:
     parser.add_argument("--max-learning-rate", type=float, default=2e-5)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--initial-projection", type=Path)
+    parser.add_argument("--capture-dir", type=Path)
     parser.add_argument("--wandb-project", default="")
     parser.add_argument("--wandb-name", default="")
     parser.add_argument(
@@ -150,6 +151,7 @@ def main() -> None:
     args.initial_projection = (
         args.initial_projection or args.root / "initial_selector_projection.safetensors"
     )
+    args.capture_dir = args.capture_dir or args.root / "capture"
     args.study_name = args.study_name or f"dflash2-representative-lora-{args.gpu}"
 
     args.study_dir.mkdir(parents=True, exist_ok=True)
@@ -238,6 +240,7 @@ def main() -> None:
         "learning_rate_range": [args.min_learning_rate, args.max_learning_rate],
         "model": str(args.model),
         "initial_projection": str(args.initial_projection),
+        "capture_dir": str(args.capture_dir),
         "wandb_project": args.wandb_project,
         "best_trial": trials[0],
         "trials": trials,
