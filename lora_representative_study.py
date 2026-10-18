@@ -19,6 +19,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
     )
     learning_rate = trial.suggest_float("learning_rate", 1e-6, 2e-5, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-5, 0.03, log=True)
+    epochs = trial.suggest_int("epochs", 1, args.max_epochs)
 
     output = args.study_dir / f"trial-{trial.number:02d}"
     if output.exists():
@@ -28,7 +29,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
         "-m",
         "mlx_gptq.dflash2_distill",
         "--model",
-        str(args.root / "model"),
+        str(args.model),
         "--capture-dir",
         str(args.root / "capture"),
         "--output",
@@ -36,7 +37,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
         "--dflash-package",
         str(args.root / "dflash-pytorch"),
         "--initial-projection",
-        str(args.root / "initial_selector_projection.safetensors"),
+        str(args.initial_projection),
         "--mode",
         "lora",
         "--lora-rank",
@@ -46,7 +47,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
         "--device",
         "cuda:0",
         "--epochs",
-        "1",
+        str(epochs),
         "--limit",
         str(args.cycles),
         "--stratified-limit",
@@ -66,6 +67,21 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
         "128",
         "--no-resume",
     ]
+    if args.wandb_project:
+        command.extend(
+            [
+                "--wandb-mode",
+                args.wandb_mode,
+                "--wandb-project",
+                args.wandb_project,
+                "--wandb-name",
+                f"{args.study_name}-trial{trial.number:02d}",
+                "--wandb-tags",
+                args.wandb_tags,
+                "--wandb-log-every",
+                "1",
+            ]
+        )
     env = os.environ.copy()
     env.update(
         {
@@ -97,6 +113,7 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
     trial.set_user_attr("initial_metrics", receipt["initial_metrics"])
     trial.set_user_attr("validation_prompts", receipt["validation_prompts"])
     trial.set_user_attr("prompt_count", receipt["prompt_count"])
+    trial.set_user_attr("epochs", receipt["epochs"])
     shutil.rmtree(output)
     return result
 
@@ -110,12 +127,27 @@ def main() -> None:
     parser.add_argument("--trials", type=int, default=12)
     parser.add_argument("--cycles", type=int, default=640)
     parser.add_argument("--seed", type=int, default=31)
+    parser.add_argument("--max-epochs", type=int, default=1)
+    parser.add_argument("--model", type=Path)
+    parser.add_argument("--initial-projection", type=Path)
+    parser.add_argument("--wandb-project", default="")
+    parser.add_argument("--wandb-name", default="")
+    parser.add_argument(
+        "--wandb-mode", choices=("disabled", "offline"), default="offline"
+    )
+    parser.add_argument("--wandb-tags", default="dflash2")
+    parser.add_argument("--study-name", default="")
     args = parser.parse_args()
+    args.model = args.model or args.root / "model"
+    args.initial_projection = (
+        args.initial_projection or args.root / "initial_selector_projection.safetensors"
+    )
+    args.study_name = args.study_name or f"dflash2-representative-lora-{args.gpu}"
 
     args.study_dir.mkdir(parents=True, exist_ok=True)
     args.python = args.root / ".venv/bin/python"
     study = optuna.create_study(
-        study_name=f"dflash2-representative-lora-{args.gpu}",
+        study_name=args.study_name,
         storage=f"sqlite:///{args.study_dir / 'study.db'}",
         direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=args.seed, n_startup_trials=4),
@@ -192,6 +224,10 @@ def main() -> None:
         "cycles_per_trial": args.cycles,
         "validation_fraction": 0.2,
         "seed": args.seed,
+        "max_epochs": args.max_epochs,
+        "model": str(args.model),
+        "initial_projection": str(args.initial_projection),
+        "wandb_project": args.wandb_project,
         "best_trial": trials[0],
         "trials": trials,
         "non_claims": [
