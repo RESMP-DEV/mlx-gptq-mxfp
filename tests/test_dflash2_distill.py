@@ -1,6 +1,5 @@
 import pytest
 import torch
-
 from mlx_gptq.dflash2_distill import (
     LoRALinear,
     _forward,
@@ -9,6 +8,7 @@ from mlx_gptq.dflash2_distill import (
     _prompt_split,
     _remove_lora,
     _selector_loss,
+    _stratified_indices,
 )
 
 
@@ -62,6 +62,44 @@ def test_selector_loss_rejects_missing_teacher():
 
     with pytest.raises(RuntimeError, match="absent from its selector set"):
         _selector_loss(model, payload, hidden, "cpu")
+
+
+def test_selector_loss_reports_runtime_aligned_metrics():
+    torch.manual_seed(7)
+    model = _Model()
+    payload = _payload()
+    hidden = torch.zeros(1, 2, 4)
+
+    loss, metrics = _selector_loss(
+        model,
+        payload,
+        hidden,
+        "cpu",
+        predecessor_mode="predicted",
+        return_metrics=True,
+    )
+
+    assert torch.isfinite(loss)
+    assert set(metrics) == {"loss", "top1_accuracy", "exact_match", "prefix_accuracy"}
+    for value in metrics.values():
+        assert torch.isfinite(value)
+    assert 0.0 <= float(metrics["top1_accuracy"]) <= 1.0
+    assert 0.0 <= float(metrics["exact_match"]) <= 1.0
+    assert 0.0 <= float(metrics["prefix_accuracy"]) <= 1.0
+
+
+def test_stratified_limit_keeps_prompt_coverage_and_counts():
+    prompt_ids = [0] * 8 + [1] * 4 + [2] * 2 + [3] * 2
+    selected = _stratified_indices(prompt_ids, limit=8, seed=17)
+
+    assert len(selected) == 8
+    assert len(selected) == len(set(selected))
+    assert {prompt_ids[index] for index in selected} == {0, 1, 2, 3}
+    counts = {prompt_id: 0 for prompt_id in range(4)}
+    for index in selected:
+        counts[prompt_ids[index]] += 1
+    assert counts[0] > counts[1]
+    assert counts[1] >= counts[2]
 
 
 def test_lora_linear_starts_equivalent_and_receives_gradients():
