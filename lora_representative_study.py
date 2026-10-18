@@ -17,7 +17,9 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
     predecessor_mode = trial.suggest_categorical(
         "predecessor_mode", ("teacher", "predicted")
     )
-    learning_rate = trial.suggest_float("learning_rate", 1e-6, 2e-5, log=True)
+    learning_rate = trial.suggest_float(
+        "learning_rate", args.min_learning_rate, args.max_learning_rate, log=True
+    )
     weight_decay = trial.suggest_float("weight_decay", 1e-5, 0.03, log=True)
     epochs = trial.suggest_int("epochs", 1, args.max_epochs)
 
@@ -132,6 +134,8 @@ def main() -> None:
     parser.add_argument("--cycles", type=int, default=640)
     parser.add_argument("--seed", type=int, default=31)
     parser.add_argument("--max-epochs", type=int, default=1)
+    parser.add_argument("--min-learning-rate", type=float, default=1e-6)
+    parser.add_argument("--max-learning-rate", type=float, default=2e-5)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--initial-projection", type=Path)
     parser.add_argument("--wandb-project", default="")
@@ -157,47 +161,49 @@ def main() -> None:
         sampler=optuna.samplers.TPESampler(seed=args.seed, n_startup_trials=4),
         load_if_exists=True,
     )
+    low_rate = args.min_learning_rate * 2.0
+    middle_rate = args.min_learning_rate * 10.0
     queued = (
         {
             "rank": 4,
             "alpha_ratio": 1.0,
             "predecessor_mode": "teacher",
-            "learning_rate": 5e-6,
+            "learning_rate": low_rate,
             "weight_decay": 0.01,
         },
         {
             "rank": 4,
             "alpha_ratio": 2.0,
             "predecessor_mode": "predicted",
-            "learning_rate": 5e-6,
+            "learning_rate": low_rate,
             "weight_decay": 0.01,
         },
         {
             "rank": 8,
             "alpha_ratio": 1.0,
             "predecessor_mode": "teacher",
-            "learning_rate": 1e-5,
+            "learning_rate": middle_rate,
             "weight_decay": 0.01,
         },
         {
             "rank": 8,
             "alpha_ratio": 2.0,
             "predecessor_mode": "predicted",
-            "learning_rate": 1e-5,
+            "learning_rate": middle_rate,
             "weight_decay": 0.01,
         },
         {
             "rank": 16,
             "alpha_ratio": 1.0,
             "predecessor_mode": "teacher",
-            "learning_rate": 2e-5,
+            "learning_rate": args.max_learning_rate,
             "weight_decay": 0.01,
         },
         {
             "rank": 16,
             "alpha_ratio": 2.0,
             "predecessor_mode": "predicted",
-            "learning_rate": 2e-5,
+            "learning_rate": args.max_learning_rate,
             "weight_decay": 0.01,
         },
     )
@@ -229,6 +235,7 @@ def main() -> None:
         "validation_fraction": 0.2,
         "seed": args.seed,
         "max_epochs": args.max_epochs,
+        "learning_rate_range": [args.min_learning_rate, args.max_learning_rate],
         "model": str(args.model),
         "initial_projection": str(args.initial_projection),
         "wandb_project": args.wandb_project,
