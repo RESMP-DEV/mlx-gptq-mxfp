@@ -41,6 +41,8 @@ class LoRALinear(torch.nn.Module):
             raise ValueError("DFlash2 LoRA requires a bias-free linear layer")
         self.base = base
         self.rank = int(rank)
+        self.in_features = base.in_features
+        self.out_features = base.out_features
         self.scaling = float(alpha) / float(rank)
         self.a = torch.nn.Parameter(
             torch.empty(rank, base.in_features, device=base.weight.device)
