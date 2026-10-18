@@ -75,14 +75,21 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
             "TOKENIZERS_PARALLELISM": "false",
         }
     )
-    with (args.study_dir / f"trial-{trial.number:02d}.log").open("w") as log:
-        subprocess.run(
+    log_path = args.study_dir / f"trial-{trial.number:02d}.log"
+    with log_path.open("w") as log:
+        completed = subprocess.run(
             command,
             cwd=args.root,
             env=env,
             stdout=log,
             stderr=subprocess.STDOUT,
-            check=True,
+            check=False,
+        )
+    if completed.returncode != 0:
+        trial.set_user_attr("failed_exit_code", completed.returncode)
+        trial.set_user_attr("failed_log", str(log_path))
+        raise optuna.TrialPruned(
+            f"trial command exited {completed.returncode}; see {log_path}"
         )
     receipt = json.loads((output / "receipt.json").read_text())
     result = float(receipt["best_validation"])
@@ -164,6 +171,7 @@ def main() -> None:
         lambda trial: run_trial(trial, args),
         n_trials=args.trials,
         gc_after_trial=True,
+        catch=(RuntimeError, optuna.TrialPruned),
     )
     trials = sorted(
         (
