@@ -429,6 +429,7 @@ def run(args):
     step = 0
     best = math.inf
     best_parameters = _parameter_snapshot(model)
+    best_metrics = None
     history = []
     if args.resume and checkpoint_path.is_file():
         checkpoint = torch.load(
@@ -445,6 +446,7 @@ def run(args):
         step = int(checkpoint["step"])
         best = float(checkpoint["best"])
         best_parameters = checkpoint["best_parameters"]
+        best_metrics = checkpoint["best_metrics"]
         history = list(checkpoint["history"])
         print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
     started = time.time()
@@ -463,6 +465,7 @@ def run(args):
             else 1.0 - float(initial_metrics["prefix_accuracy"])
         )
         best_parameters = _parameter_snapshot(model)
+        best_metrics = initial_metrics
         history.append({"epoch": -1, "validation": best})
         if wandb_run is not None:
             wandb_run.log({"epoch": -1, **_flat_metrics("validation", initial_metrics)})
@@ -524,6 +527,7 @@ def run(args):
         if validation < best:
             best = validation
             best_parameters = _parameter_snapshot(model)
+            best_metrics = validation_metrics
         temporary_checkpoint = checkpoint_path.with_suffix(".pt.tmp")
         torch.save(
             {
@@ -535,6 +539,7 @@ def run(args):
                 "step": step,
                 "best": best,
                 "best_parameters": best_parameters,
+                "best_metrics": best_metrics,
                 "history": history,
             },
             temporary_checkpoint,
@@ -562,6 +567,7 @@ def run(args):
         "validation_prompts": sorted(validation_prompts),
         "epochs": args.epochs,
         "best_validation": best,
+        "best_validation_metrics": best_metrics,
         "selection_metric": args.selection_metric,
         "validation_metrics": validation_metrics,
         "predecessor_mode": args.predecessor_mode,
