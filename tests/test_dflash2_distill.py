@@ -184,6 +184,7 @@ def test_distribution_loss_uses_aligned_full_vocab_logits():
 
     assert torch.isfinite(loss)
     assert set(metrics) == {
+        "loss",
         "distribution_loss",
         "distribution_ce",
         "distribution_tv",
@@ -211,8 +212,10 @@ def test_hybrid_cycle_loss_combines_selector_and_distribution_terms():
     )
 
     assert torch.isfinite(loss)
+    assert metrics["loss"] == loss
     assert "prefix_accuracy" in metrics
     assert "distribution_tv" in metrics
+    assert metrics["loss"] == loss
 
 
 def test_install_lora_wraps_draft_linears_but_not_selector_projection():

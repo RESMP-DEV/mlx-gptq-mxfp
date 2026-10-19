@@ -324,8 +324,10 @@ def _distribution_loss(
     student_probs = torch.softmax(student_logits, dim=-1)
     target_probs = torch.softmax(target_logits, dim=-1)
     tv = 0.5 * (student_probs - target_probs).abs().sum(dim=-1).mean()
-    return ce + tv, {
-        "distribution_loss": (ce + tv).detach(),
+    loss = ce + tv
+    return loss, {
+        "loss": loss.detach(),
+        "distribution_loss": loss.detach(),
         "distribution_ce": ce.detach(),
         "distribution_tv": tv.detach(),
     }
@@ -362,9 +364,11 @@ def _cycle_loss(
     distribution_loss, distribution_metrics = _distribution_loss(
         payload, hidden, device, lm_head
     )
-    return selector_loss + distribution_loss, {
+    loss = selector_loss + distribution_loss
+    return loss, {
         **selector_metrics,
         **distribution_metrics,
+        "loss": loss.detach(),
     }
 
 
