@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -133,7 +134,9 @@ class LoRALinear(torch.nn.Module):
         effective_weight = self.base.weight + (self.b @ self.a) * self.scaling
         if self.qat_mxfp4:
             effective_weight = fake_quantize_mxfp4(effective_weight)
-        return torch.nn.functional.linear(input, effective_weight)
+        return torch.nn.functional.linear(
+            input, effective_weight.to(input.dtype)
+        )
 
 
 def _forward(model, payload, device, *, use_selector_hidden: bool = True):
@@ -224,7 +227,12 @@ def _merge_lora(model: torch.nn.Module) -> None:
         for module in [
             item for item in model.modules() if isinstance(item, LoRALinear)
         ]:
-            module.base.weight.add_(module.b @ module.a * module.scaling)
+            effective = module.base.weight.float() + (
+                module.b @ module.a * module.scaling
+            )
+            if module.qat_mxfp4:
+                effective = fake_quantize_mxfp4(effective)
+            module.base.weight.copy_(effective.to(module.base.weight.dtype))
 
 
 def _remove_lora(model: torch.nn.Module) -> None:
@@ -251,7 +259,9 @@ def _selector_loss(
     projection_weight = model.candidate_selector.hidden_projection.weight
     if getattr(model, "qat_mxfp4", False):
         projection_weight = fake_quantize_mxfp4(projection_weight)
-    projected = torch.nn.functional.linear(hidden, projection_weight)
+    projected = torch.nn.functional.linear(
+        hidden.float(), projection_weight.float()
+    )
     successor = model.candidate_selector.successor_codebook(candidate_ids)
     predecessor = payload["anchor"].to(device).long()
     losses = []
@@ -259,9 +269,9 @@ def _selector_loss(
     for position in range(candidate_ids.shape[1]):
         edge = torch.einsum(
             "br,bkr->bk",
-            model.candidate_selector.predecessor_codebook(predecessor)
+            model.candidate_selector.predecessor_codebook(predecessor).float()
             * projected[:, position],
-            successor[:, position],
+            successor[:, position].float(),
         )
         matches = candidate_ids[:, position] == target_ids[:, position]
         if not bool(matches.any(dim=1).item()):
@@ -309,6 +319,7 @@ def _distribution_loss(
     lm_head: torch.Tensor,
     ce_weight: float = 1.0,
     tv_weight: float = 1.0,
+    reduction: str = "mean",
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     target_logits = payload["target_logits"][1:].to(device).float()[None]
     if hidden.shape[1] != target_logits.shape[1]:
@@ -322,10 +333,12 @@ def _distribution_loss(
     ce = torch.nn.functional.cross_entropy(
         student_logits.reshape(-1, vocab_size),
         target_ids.reshape(-1),
+        reduction=reduction,
     )
     student_probs = torch.softmax(student_logits, dim=-1)
     target_probs = torch.softmax(target_logits, dim=-1)
-    tv = 0.5 * (student_probs - target_probs).abs().sum(dim=-1).mean()
+    position_tv = 0.5 * (student_probs - target_probs).abs().sum(dim=-1)
+    tv = position_tv.mean() if reduction == "mean" else position_tv.sum()
     loss = ce_weight * ce + tv_weight * tv
     return loss, {
         "loss": loss.detach(),
@@ -347,12 +360,13 @@ def _cycle_loss(
     selector_weight: float = 1.0,
     ce_weight: float = 1.0,
     tv_weight: float = 1.0,
+    reduction: str = "mean",
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     if loss_mode == "distribution":
         if lm_head is None:
             raise RuntimeError("distribution loss requires an output head")
         return _distribution_loss(
-            payload, hidden, device, lm_head, ce_weight, tv_weight
+            payload, hidden, device, lm_head, ce_weight, tv_weight, reduction
         )
 
     selector_loss, selector_metrics = _selector_loss(
@@ -362,6 +376,7 @@ def _cycle_loss(
         device,
         predecessor_mode=predecessor_mode,
         return_metrics=True,
+        reduction=reduction,
     )
     if loss_mode == "selector":
         return selector_loss, selector_metrics
@@ -369,7 +384,7 @@ def _cycle_loss(
     if lm_head is None:
         raise RuntimeError("hybrid loss requires an output head")
     distribution_loss, distribution_metrics = _distribution_loss(
-        payload, hidden, device, lm_head, ce_weight, tv_weight
+        payload, hidden, device, lm_head, ce_weight, tv_weight, reduction
     )
     loss = selector_weight * selector_loss + distribution_loss
     return loss, {
@@ -421,6 +436,7 @@ def _evaluate_cycles(
                 selector_weight=selector_weight,
                 ce_weight=ce_weight,
                 tv_weight=tv_weight,
+                reduction=reduction,
             )
             values = {name: float(tensor) for name, tensor in metrics.items()}
             for name, value in values.items():
@@ -488,8 +504,43 @@ def _cuda_memory_snapshot(device: str) -> dict[str, float] | None:
     }
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for block in iter(lambda: file.read(8 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _training_fingerprint(args: argparse.Namespace) -> dict[str, object]:
+    model_path = Path(args.model)
+    model_file = (
+        model_path / "model.safetensors" if model_path.is_dir() else model_path
+    )
+    return {
+        "model_sha256": _sha256(model_file),
+        "capture_index_sha256": _sha256(Path(args.capture_dir) / "index.json"),
+        "mode": args.mode,
+        "lora_rank": args.lora_rank,
+        "lora_alpha": args.lora_alpha,
+        "loss_mode": args.loss_mode,
+        "loss_reduction": args.loss_reduction,
+        "selector_weight": args.selector_weight,
+        "distribution_ce_weight": args.distribution_ce_weight,
+        "distribution_tv_weight": args.distribution_tv_weight,
+        "predecessor_mode": args.predecessor_mode,
+        "selection_metric": args.selection_metric,
+        "seed": args.seed,
+        "validation_fraction": args.validation_fraction,
+    }
+
+
 def run(args):
     device = args.device
+    if args.selection_metric == "auto":
+        args.selection_metric = "prefix" if args.loss_mode == "selector" else "loss"
+    elif args.loss_mode != "selector" and args.selection_metric == "prefix":
+        raise ValueError("prefix selection is only valid for selector loss")
     torch.manual_seed(args.seed)
     model = _load_reference(args.model, args.dflash_package, device)
     model.qat_mxfp4 = args.qat_mxfp4
@@ -546,6 +597,7 @@ def run(args):
         optimizer, T_max=max(1, args.epochs * len(ids))
     )
     checkpoint_path = output / "checkpoint.pt"
+    fingerprint = _training_fingerprint(args)
     load_memory = _cuda_memory_snapshot(device)
     if device.startswith("cuda"):
         torch.cuda.reset_peak_memory_stats(device)
@@ -572,6 +624,8 @@ def run(args):
         best_parameters = checkpoint["best_parameters"]
         best_metrics = checkpoint["best_metrics"]
         history = list(checkpoint["history"])
+        if checkpoint.get("fingerprint") != fingerprint:
+            raise RuntimeError("checkpoint training fingerprint does not match")
         print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
     started = time.time()
     initial_metrics = _evaluate_cycles(
@@ -624,6 +678,7 @@ def run(args):
                     selector_weight=args.selector_weight,
                     ce_weight=args.distribution_ce_weight,
                     tv_weight=args.distribution_tv_weight,
+                    reduction=args.loss_reduction,
                 )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -694,14 +749,19 @@ def run(args):
                 "best": best,
                 "best_parameters": best_parameters,
                 "best_metrics": best_metrics,
+                "fingerprint": fingerprint,
                 "history": history,
             },
             temporary_checkpoint,
         )
         os.replace(temporary_checkpoint, checkpoint_path)
+    validation_metrics = initial_metrics
     _restore_parameters(model, best_parameters)
+    projection_export = (
+        fake_quantize_mxfp4(projection) if args.qat_mxfp4 else projection
+    )
     save_file(
-        {"weight": selector.weight.detach().cpu().contiguous()},
+        {"weight": projection_export.detach().cpu().contiguous()},
         str(output / "distilled_hidden_projection.safetensors"),
     )
     if args.mode == "lora":
@@ -724,6 +784,7 @@ def run(args):
         "best_validation": best,
         "best_validation_metrics": best_metrics,
         "selection_metric": args.selection_metric,
+        "training_fingerprint": fingerprint,
         "validation_metrics": validation_metrics,
         "predecessor_mode": args.predecessor_mode,
         "loss_mode": args.loss_mode,
@@ -801,8 +862,8 @@ def main():
     parser.add_argument("--validation-fraction", type=float, default=0.05)
     parser.add_argument(
         "--selection-metric",
-        choices=("ce", "prefix", "loss"),
-        default="prefix",
+        choices=("auto", "ce", "prefix", "loss"),
+        default="auto",
     )
     parser.add_argument(
         "--loss-mode",

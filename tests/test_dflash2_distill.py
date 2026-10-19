@@ -164,6 +164,21 @@ def test_qat_lora_uses_mxfp_grid_and_passes_gradients():
     assert torch.isfinite(module.b.grad).all()
 
 
+def test_qat_merge_exports_fake_quantized_weights():
+    torch.manual_seed(31)
+    base = torch.nn.Linear(64, 32, bias=False).to(torch.bfloat16)
+    module = LoRALinear(base, rank=2, alpha=4.0, qat_mxfp4=True)
+    with torch.no_grad():
+        module.b[:, 0] = 0.125
+    input = torch.randn(2, 64, dtype=torch.bfloat16)
+
+    trained = module(input).to(torch.bfloat16)
+    _merge_lora(module)
+    exported = torch.nn.functional.linear(input, module.base.weight)
+
+    torch.testing.assert_close(trained, exported)
+
+
 def test_fake_quantize_mxfp4_straight_through_gradient():
     weight = torch.randn(4, 64, requires_grad=True)
     quantized = fake_quantize_mxfp4(weight)
@@ -210,6 +225,27 @@ def test_distribution_loss_weights_ce_and_tv():
 
     expected = 0.1 * metrics["distribution_ce"] + 0.9 * metrics["distribution_tv"]
     torch.testing.assert_close(loss, expected)
+
+
+def test_distribution_loss_honors_sum_reduction():
+    torch.manual_seed(29)
+    hidden = torch.randn(1, 2, 4)
+    lm_head = torch.randn(6, 4)
+    payload = {
+        "target_logits": torch.randn(3, 6),
+        "target_greedy": torch.tensor([0, 1, 2]),
+    }
+
+    mean_loss, mean_metrics = _distribution_loss(
+        payload, hidden, "cpu", lm_head, reduction="mean"
+    )
+    sum_loss, sum_metrics = _distribution_loss(
+        payload, hidden, "cpu", lm_head, reduction="sum"
+    )
+
+    assert sum_metrics["distribution_ce"] == 2 * mean_metrics["distribution_ce"]
+    assert sum_metrics["distribution_tv"] == 2 * mean_metrics["distribution_tv"]
+    assert sum_loss == 2 * mean_loss
 
 
 def test_hybrid_cycle_loss_combines_selector_and_distribution_terms():
@@ -349,6 +385,47 @@ def test_forward_can_ignore_captured_selector_hidden():
     output = _forward(Model(), payload, "cpu", use_selector_hidden=False)
 
     assert output.shape == payload["selector_hidden"].shape
+
+
+def test_full_replay_paths_gradients_through_fc_and_layer_lora():
+    class Rotary:
+        def __call__(self, noise, position_ids):
+            return torch.zeros_like(noise), torch.zeros_like(noise)
+
+    class Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.attn = torch.nn.Linear(4, 4, bias=False)
+
+        def forward(self, hidden_states, target_hidden, **_):
+            return hidden_states + self.attn(target_hidden)
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc = torch.nn.Linear(8, 4, bias=False)
+            self.hidden_norm = torch.nn.LayerNorm(4)
+            self.rotary_emb = Rotary()
+            self.layers = torch.nn.ModuleList([Layer()])
+            self.norm = torch.nn.Identity()
+
+    model = Model()
+    _install_lora(model, rank=2, alpha=4.0)
+    payload = {
+        "selector_hidden": torch.zeros(1, 1, 4),
+        "context": torch.randn(1, 2, 4),
+        "raw_context": torch.randn(1, 2, 8),
+        "noise_embedding": torch.randn(1, 2, 4),
+    }
+
+    hidden = _forward(model, payload, "cpu", use_selector_hidden=False)
+    hidden.sum().backward()
+
+    assert model.fc.a.grad is not None
+    assert model.fc.b.grad is not None
+    layer = model.layers[0]
+    assert layer.attn.a.grad is not None
+    assert layer.attn.b.grad is not None
 
 
 def test_prompt_split_never_leaks_a_prompt():
