@@ -302,6 +302,72 @@ def _selector_loss(
     return loss, metrics
 
 
+def _distribution_loss(
+    payload,
+    hidden: torch.Tensor,
+    device: str,
+    lm_head: torch.Tensor,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    target_logits = payload["target_logits"][1:].to(device).float()[None]
+    if hidden.shape[1] != target_logits.shape[1]:
+        raise ValueError(
+            "target logits and draft hidden states have different lengths: "
+            f"{target_logits.shape[1]} != {hidden.shape[1]}"
+        )
+    student_logits = torch.nn.functional.linear(hidden, lm_head).float()
+    target_ids = payload["target_greedy"][1:].to(device).long()[None]
+    vocab_size = student_logits.shape[-1]
+    ce = torch.nn.functional.cross_entropy(
+        student_logits.reshape(-1, vocab_size),
+        target_ids.reshape(-1),
+    )
+    student_probs = torch.softmax(student_logits, dim=-1)
+    target_probs = torch.softmax(target_logits, dim=-1)
+    tv = 0.5 * (student_probs - target_probs).abs().sum(dim=-1).mean()
+    return ce + tv, {
+        "distribution_loss": (ce + tv).detach(),
+        "distribution_ce": ce.detach(),
+        "distribution_tv": tv.detach(),
+    }
+
+
+def _cycle_loss(
+    model,
+    payload,
+    hidden: torch.Tensor,
+    device: str,
+    *,
+    loss_mode: str,
+    predecessor_mode: str,
+    lm_head: torch.Tensor | None,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    if loss_mode == "distribution":
+        if lm_head is None:
+            raise RuntimeError("distribution loss requires an output head")
+        return _distribution_loss(payload, hidden, device, lm_head)
+
+    selector_loss, selector_metrics = _selector_loss(
+        model,
+        payload,
+        hidden,
+        device,
+        predecessor_mode=predecessor_mode,
+        return_metrics=True,
+    )
+    if loss_mode == "selector":
+        return selector_loss, selector_metrics
+
+    if lm_head is None:
+        raise RuntimeError("hybrid loss requires an output head")
+    distribution_loss, distribution_metrics = _distribution_loss(
+        payload, hidden, device, lm_head
+    )
+    return selector_loss + distribution_loss, {
+        **selector_metrics,
+        **distribution_metrics,
+    }
+
+
 def _evaluate_cycles(
     dataset: CycleDataset,
     indices: list[int],
@@ -310,13 +376,10 @@ def _evaluate_cycles(
     *,
     reduction: str,
     predecessor_mode: str,
+    loss_mode: str,
+    lm_head: torch.Tensor | None,
 ) -> dict[str, float | dict[str, float]]:
-    totals = {
-        "loss": 0.0,
-        "top1_accuracy": 0.0,
-        "exact_match": 0.0,
-        "prefix_accuracy": 0.0,
-    }
+    totals: dict[str, float] = {}
     count = 0
     by_prompt: dict[int, dict[str, float]] = {}
     prompt_counts: dict[int, int] = {}
@@ -328,14 +391,14 @@ def _evaluate_cycles(
         for index in sorted(indices):
             payload, prompt_id = dataset[index]
             hidden = _forward(model, payload, device)
-            _loss, metrics = _selector_loss(
+            _loss, metrics = _cycle_loss(
                 model,
                 payload,
                 hidden,
                 device,
-                reduction=reduction,
                 predecessor_mode=predecessor_mode,
-                return_metrics=True,
+                loss_mode=loss_mode,
+                lm_head=lm_head,
             )
             values = {name: float(tensor) for name, tensor in metrics.items()}
             for name, value in values.items():
@@ -397,6 +460,13 @@ def run(args):
     torch.manual_seed(args.seed)
     model = _load_reference(args.model, args.dflash_package, device)
     model.qat_mxfp4 = args.qat_mxfp4
+    lm_head = None
+    if args.loss_mode != "selector":
+        if not args.lm_head:
+            raise ValueError(f"{args.loss_mode} loss requires --lm-head")
+        lm_head = load_file(args.lm_head)["weight"].to(device)
+        if lm_head.ndim != 2:
+            raise ValueError("output head must be a two-dimensional weight")
     if args.triton_dynamic_conv:
         import dflash.model as dflash_model
 
@@ -475,13 +545,18 @@ def run(args):
         device,
         reduction=args.loss_reduction,
         predecessor_mode=args.predecessor_mode,
+        loss_mode=args.loss_mode,
+        lm_head=lm_head,
     )
     if start_epoch == 0:
-        best = (
-            float(initial_metrics["loss"])
-            if args.selection_metric == "ce"
-            else 1.0 - float(initial_metrics["prefix_accuracy"])
-        )
+        if args.selection_metric == "prefix":
+            best = 1.0 - float(initial_metrics["prefix_accuracy"])
+        elif args.selection_metric == "ce":
+            best = float(
+                initial_metrics.get("distribution_ce", initial_metrics["loss"])
+            )
+        else:
+            best = float(initial_metrics["loss"])
         best_parameters = _parameter_snapshot(model)
         best_metrics = initial_metrics
         history.append({"epoch": -1, "validation": best})
@@ -494,13 +569,14 @@ def run(args):
             payload, _ = dataset[index]
             with torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16):
                 hidden = _forward(model, payload, device)
-                loss = _selector_loss(
+                loss, _train_metrics = _cycle_loss(
                     model,
                     payload,
                     hidden,
                     device,
-                    args.loss_reduction,
-                    args.predecessor_mode,
+                    predecessor_mode=args.predecessor_mode,
+                    loss_mode=args.loss_mode,
+                    lm_head=lm_head,
                 )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -529,11 +605,21 @@ def run(args):
             device,
             reduction=args.loss_reduction,
             predecessor_mode=args.predecessor_mode,
+            loss_mode=args.loss_mode,
+            lm_head=lm_head,
         )
         validation = (
-            float(validation_metrics["loss"])
-            if args.selection_metric == "ce"
-            else 1.0 - float(validation_metrics["prefix_accuracy"])
+            1.0 - float(validation_metrics["prefix_accuracy"])
+            if args.selection_metric == "prefix"
+            else (
+                float(
+                    validation_metrics.get(
+                        "distribution_ce", validation_metrics["loss"]
+                    )
+                )
+                if args.selection_metric == "ce"
+                else float(validation_metrics["loss"])
+            )
         )
         print(
             {"epoch": epoch, "validation": validation, **validation_metrics}, flush=True
@@ -589,6 +675,8 @@ def run(args):
         "selection_metric": args.selection_metric,
         "validation_metrics": validation_metrics,
         "predecessor_mode": args.predecessor_mode,
+        "loss_mode": args.loss_mode,
+        "lm_head": args.lm_head,
         "triton_dynamic_conv": args.triton_dynamic_conv,
         "qat_mxfp4": args.qat_mxfp4,
         "steps": step,
@@ -615,7 +703,11 @@ def run(args):
             }
         ),
         "objective": (
-            "Teacher-greedy cross-entropy over target top-k unary-plus-edge scores"
+            "Teacher-greedy selector cross-entropy"
+            if args.loss_mode == "selector"
+            else "Full-vocab teacher CE plus TV"
+            if args.loss_mode == "distribution"
+            else "Selector CE plus full-vocab teacher CE and TV"
         ),
         "non_claims": [
             "Validation metrics are captured-cycle proxies, not live acceptance.",
@@ -652,8 +744,16 @@ def main():
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--validation-fraction", type=float, default=0.05)
     parser.add_argument(
-        "--selection-metric", choices=("ce", "prefix"), default="prefix"
+        "--selection-metric",
+        choices=("ce", "prefix", "loss"),
+        default="prefix",
     )
+    parser.add_argument(
+        "--loss-mode",
+        choices=("selector", "distribution", "hybrid"),
+        default="selector",
+    )
+    parser.add_argument("--lm-head")
     parser.add_argument(
         "--predecessor-mode", choices=("teacher", "predicted"), default="teacher"
     )

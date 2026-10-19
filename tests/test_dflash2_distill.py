@@ -2,6 +2,8 @@ import pytest
 import torch
 from mlx_gptq.dflash2_distill import (
     LoRALinear,
+    _cycle_loss,
+    _distribution_loss,
     _flat_metrics,
     _forward,
     _install_lora,
@@ -166,6 +168,51 @@ def test_fake_quantize_mxfp4_straight_through_gradient():
     quantized.sum().backward()
 
     assert torch.equal(weight.grad, torch.ones_like(weight))
+
+
+def test_distribution_loss_uses_aligned_full_vocab_logits():
+    torch.manual_seed(17)
+    hidden = torch.randn(1, 2, 4)
+    lm_head = torch.randn(6, 4)
+    target_logits = torch.randn(3, 6)
+    payload = {
+        "target_logits": target_logits,
+        "target_greedy": torch.tensor([0, 1, 2]),
+    }
+
+    loss, metrics = _distribution_loss(payload, hidden, "cpu", lm_head)
+
+    assert torch.isfinite(loss)
+    assert set(metrics) == {
+        "distribution_loss",
+        "distribution_ce",
+        "distribution_tv",
+    }
+    assert torch.isfinite(metrics["distribution_ce"])
+    assert torch.isfinite(metrics["distribution_tv"])
+
+
+def test_hybrid_cycle_loss_combines_selector_and_distribution_terms():
+    torch.manual_seed(19)
+    model = _Model()
+    payload = _payload()
+    payload["target_logits"] = torch.randn(3, 10)
+    hidden = torch.randn(1, 2, 4)
+    lm_head = torch.randn(10, 4)
+
+    loss, metrics = _cycle_loss(
+        model,
+        payload,
+        hidden,
+        "cpu",
+        loss_mode="hybrid",
+        predecessor_mode="teacher",
+        lm_head=lm_head,
+    )
+
+    assert torch.isfinite(loss)
+    assert "prefix_accuracy" in metrics
+    assert "distribution_tv" in metrics
 
 
 def test_install_lora_wraps_draft_linears_but_not_selector_projection():
