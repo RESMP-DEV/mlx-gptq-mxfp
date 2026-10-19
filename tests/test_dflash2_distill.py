@@ -26,8 +26,9 @@ class _Selector:
         self.hidden_projection = torch.nn.Linear(4, 4, bias=False)
 
 
-class _Model:
+class _Model(torch.nn.Module):
     def __init__(self):
+        super().__init__()
         self.candidate_selector = _Selector()
 
 
@@ -231,22 +232,21 @@ def test_evaluate_cycles_accumulates_first_metric():
     metrics = _evaluate_cycles(
         Dataset(),
         [0],
-        torch.nn.Module(),
+        _Model(),
         "cpu",
         reduction="mean",
         predecessor_mode="teacher",
-        loss_mode="distribution",
-        lm_head=torch.randn(10, 4),
+        loss_mode="selector",
+        lm_head=None,
     )
 
     assert set(metrics) == {
         "loss",
-        "distribution_loss",
-        "distribution_ce",
-        "distribution_tv",
+        "top1_accuracy",
+        "exact_match",
+        "prefix_accuracy",
         "by_prompt",
     }
-    assert metrics["loss"] == metrics["distribution_loss"]
 
 
 def test_install_lora_wraps_draft_linears_but_not_selector_projection():
@@ -304,6 +304,34 @@ def test_forward_falls_back_when_raw_context_is_incomplete():
     output = _forward(Model(), payload, "cpu")
 
     assert output.shape == (1, 1, 4)
+
+
+def test_forward_can_ignore_captured_selector_hidden():
+    class Rotary:
+        def __call__(self, noise, position_ids):
+            return torch.zeros_like(noise), torch.zeros_like(noise)
+
+    class Layer(torch.nn.Module):
+        def forward(self, hidden_states, target_hidden, **_):
+            return hidden_states
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc = torch.nn.Linear(8, 4, bias=False)
+            self.hidden_norm = torch.nn.LayerNorm(4)
+            self.rotary_emb = Rotary()
+            self.layers = [Layer()]
+            self.norm = torch.nn.Identity()
+
+    payload = {
+        "selector_hidden": torch.randn(1, 1, 4),
+        "context": torch.randn(1, 2, 4),
+        "noise_embedding": torch.randn(1, 2, 4),
+    }
+    output = _forward(Model(), payload, "cpu", use_selector_hidden=False)
+
+    assert output.shape == payload["selector_hidden"].shape
 
 
 def test_prompt_split_never_leaks_a_prompt():

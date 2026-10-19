@@ -136,8 +136,8 @@ class LoRALinear(torch.nn.Module):
         return torch.nn.functional.linear(input, effective_weight)
 
 
-def _forward(model, payload, device):
-    if "selector_hidden" in payload:
+def _forward(model, payload, device, *, use_selector_hidden: bool = True):
+    if use_selector_hidden and "selector_hidden" in payload:
         return payload["selector_hidden"].to(device)
     noise = payload["noise_embedding"].to(device)
     raw_context = payload.get("raw_context")
@@ -394,7 +394,12 @@ def _evaluate_cycles(
     ):
         for index in sorted(indices):
             payload, prompt_id = dataset[index]
-            hidden = _forward(model, payload, device)
+            hidden = _forward(
+                model,
+                payload,
+                device,
+                use_selector_hidden=loss_mode == "selector",
+            )
             _loss, metrics = _cycle_loss(
                 model,
                 payload,
@@ -586,7 +591,12 @@ def run(args):
         for index in order:
             payload, _ = dataset[index]
             with torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16):
-                hidden = _forward(model, payload, device)
+                hidden = _forward(
+                    model,
+                    payload,
+                    device,
+                    use_selector_hidden=args.loss_mode == "selector",
+                )
                 loss, _train_metrics = _cycle_loss(
                     model,
                     payload,
