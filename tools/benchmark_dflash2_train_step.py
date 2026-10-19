@@ -38,12 +38,14 @@ def main() -> None:
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     _install_lora(model, args.rank, args.alpha)
-    projection = model.candidate_selector.hidden_projection
-    projection.weight = torch.nn.Parameter(
-        projection.weight.detach().float(), requires_grad=True
+    selector = model.candidate_selector.hidden_projection
+    selector.weight = torch.nn.Parameter(
+        selector.weight.detach().float(), requires_grad=True
     )
-    projection.data.copy_(
-        load_file(args.initial_projection, device="cpu")["weight"].to(projection.device)
+    selector.weight.data.copy_(
+        load_file(args.initial_projection, device="cpu")["weight"].to(
+            selector.weight.device
+        )
     )
 
     if args.triton:

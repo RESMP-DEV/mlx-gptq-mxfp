@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -22,42 +24,59 @@ def _grouped_dynamic_conv_kernel(
     kernel_size: tl.constexpr,
     groups: tl.constexpr,
     group_size: tl.constexpr,
+    block_groups: tl.constexpr,
 ):
     program = tl.program_id(0)
-    group = program % groups
-    position = (program // groups) % sequence_length
-    batch = program // (sequence_length * groups)
+    group_blocks = tl.cdiv(groups, block_groups)
+    group_start = (program % group_blocks) * block_groups
+    position = (program // group_blocks) % sequence_length
+    batch = program // (sequence_length * group_blocks)
 
-    offsets = tl.arange(0, group_size)
-    output = tl.zeros((group_size,), dtype=tl.float32)
+    group_offsets = group_start + tl.arange(0, block_groups)
+    group_mask = group_offsets < groups
+    element_offsets = (
+        group_offsets[:, None] * group_size + tl.arange(0, group_size)[None, :]
+    )
+    element_mask = group_mask[:, None]
+    output = tl.zeros((block_groups, group_size), dtype=tl.float32)
     for kernel_index in tl.static_range(kernel_size):
         source_position = position - kernel_index
-        source = tl.zeros((group_size,), dtype=tl.float32)
+        source = tl.zeros((block_groups, group_size), dtype=tl.float32)
         if source_position >= 0:
             source_ptr_offset = (
                 batch * source_batch_stride
                 + source_position * hidden_size
-                + group * group_size
-                + offsets
+                + element_offsets
             )
-            source = tl.load(source_ptr + source_ptr_offset).to(tl.float32)
+            source = tl.load(
+                source_ptr + source_ptr_offset, mask=element_mask, other=0.0
+            ).to(tl.float32)
         dynamic_offset = (
             batch * dynamic_batch_stride
             + position * kernel_size * groups
             + kernel_index * groups
-            + group
+            + group_offsets
         )
-        dynamic = tl.load(dynamic_ptr + dynamic_offset).to(tl.float32)
-        base_offset = kernel_index * hidden_size + group * group_size + offsets
-        base = tl.load(base_ptr + base_offset).to(tl.float32)
-        output += source * (base + dynamic)
+        dynamic = tl.load(dynamic_ptr + dynamic_offset, mask=group_mask, other=0.0).to(
+            tl.float32
+        )
+        base_offset = (
+            kernel_index * hidden_size
+            + group_offsets[:, None] * group_size
+            + tl.arange(0, group_size)[None, :]
+        )
+        base = tl.load(base_ptr + base_offset, mask=element_mask, other=0.0).to(
+            tl.float32
+        )
+        output += source * (base + dynamic[:, None])
     output_ptr_offset = (
-        batch * source_batch_stride
-        + position * hidden_size
-        + group * group_size
-        + offsets
+        batch * source_batch_stride + position * hidden_size + element_offsets
     )
-    tl.store(output_ptr + output_ptr_offset, output.to(output_ptr.dtype.element_ty))
+    tl.store(
+        output_ptr + output_ptr_offset,
+        output.to(output_ptr.dtype.element_ty),
+        mask=element_mask,
+    )
 
 
 def _launch_convolution(
@@ -72,7 +91,12 @@ def _launch_convolution(
     if groups * group_size != hidden_size or base.shape[-1] != hidden_size:
         raise ValueError("invalid grouped dynamic convolution shape")
     kernel_size = base.shape[0]
-    programs = batch * sequence_length * groups
+    block_groups = int(os.environ.get("DFLASH_TRITON_BLOCK_GROUPS", "16"))
+    num_warps = int(os.environ.get("DFLASH_TRITON_NUM_WARPS", "1"))
+    if block_groups <= 0 or block_groups & (block_groups - 1):
+        raise ValueError("DFLASH_TRITON_BLOCK_GROUPS must be a power of two")
+    group_blocks = (groups + block_groups - 1) // block_groups
+    programs = batch * sequence_length * group_blocks
     _grouped_dynamic_conv_kernel[(programs,)](
         source,
         dynamic,
@@ -87,7 +111,8 @@ def _launch_convolution(
         kernel_size,
         groups,
         group_size,
-        num_warps=1,
+        block_groups,
+        num_warps=num_warps,
         num_stages=1,
     )
 
@@ -170,4 +195,6 @@ def triton_grouped_dynamic_convolve(
         raise ValueError("Triton DFlash2 convolution currently requires kernel size 2")
     if hidden.shape[-1] != base.shape[-1]:
         raise ValueError("hidden and base widths do not match")
+    if dynamic.ndim == 4:
+        dynamic = dynamic.unsqueeze(-1)
     return _TritonGroupedDynamicConv.apply(hidden, dynamic, base)

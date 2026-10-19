@@ -84,6 +84,8 @@ def run_trial(trial: optuna.Trial, args: argparse.Namespace) -> float:
                 "1",
             ]
         )
+    if args.triton_dynamic_conv:
+        command.append("--triton-dynamic-conv")
     env = os.environ.copy()
     env.update(
         {
@@ -145,6 +147,7 @@ def main() -> None:
         "--wandb-mode", choices=("disabled", "offline"), default="offline"
     )
     parser.add_argument("--wandb-tags", default="dflash2")
+    parser.add_argument("--triton-dynamic-conv", action="store_true")
     parser.add_argument("--study-name", default="")
     args = parser.parse_args()
     args.model = args.model or args.root / "model"
@@ -242,6 +245,7 @@ def main() -> None:
         "initial_projection": str(args.initial_projection),
         "capture_dir": str(args.capture_dir),
         "wandb_project": args.wandb_project,
+        "triton_dynamic_conv": args.triton_dynamic_conv,
         "best_trial": trials[0],
         "trials": trials,
         "non_claims": [
