@@ -385,6 +385,12 @@ def run(args):
     device = args.device
     torch.manual_seed(args.seed)
     model = _load_reference(args.model, args.dflash_package, device)
+    if args.triton_dynamic_conv:
+        import dflash.model as dflash_model
+
+        from .triton_dynamic_conv import triton_grouped_dynamic_convolve
+
+        dflash_model._grouped_dynamic_convolve = triton_grouped_dynamic_convolve
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     if args.mode == "lora":
@@ -571,6 +577,7 @@ def run(args):
         "selection_metric": args.selection_metric,
         "validation_metrics": validation_metrics,
         "predecessor_mode": args.predecessor_mode,
+        "triton_dynamic_conv": args.triton_dynamic_conv,
         "steps": step,
         "elapsed_seconds": time.time() - started,
         "device": device,
@@ -638,6 +645,7 @@ def main():
         "--predecessor-mode", choices=("teacher", "predicted"), default="teacher"
     )
     parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument("--triton-dynamic-conv", action="store_true")
     parser.add_argument("--log-every", type=int, default=32)
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "offline"), default="disabled"
