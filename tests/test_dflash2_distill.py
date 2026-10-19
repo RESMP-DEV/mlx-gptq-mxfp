@@ -4,6 +4,7 @@ from mlx_gptq.dflash2_distill import (
     LoRALinear,
     _cycle_loss,
     _distribution_loss,
+    _evaluate_cycles,
     _flat_metrics,
     _forward,
     _install_lora,
@@ -215,7 +216,37 @@ def test_hybrid_cycle_loss_combines_selector_and_distribution_terms():
     assert metrics["loss"] == loss
     assert "prefix_accuracy" in metrics
     assert "distribution_tv" in metrics
-    assert metrics["loss"] == loss
+
+
+def test_evaluate_cycles_accumulates_first_metric():
+    class Dataset:
+        prompt_ids = [0]
+
+        def __getitem__(self, index: int):
+            payload = _payload()
+            payload["selector_hidden"] = torch.zeros(1, 2, 4)
+            payload["target_logits"] = torch.randn(3, 10)
+            return payload, 0
+
+    metrics = _evaluate_cycles(
+        Dataset(),
+        [0],
+        torch.nn.Module(),
+        "cpu",
+        reduction="mean",
+        predecessor_mode="teacher",
+        loss_mode="distribution",
+        lm_head=torch.randn(10, 4),
+    )
+
+    assert set(metrics) == {
+        "loss",
+        "distribution_loss",
+        "distribution_ce",
+        "distribution_tv",
+        "by_prompt",
+    }
+    assert metrics["loss"] == metrics["distribution_loss"]
 
 
 def test_install_lora_wraps_draft_linears_but_not_selector_projection():

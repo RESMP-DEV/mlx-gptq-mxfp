@@ -406,7 +406,7 @@ def _evaluate_cycles(
             )
             values = {name: float(tensor) for name, tensor in metrics.items()}
             for name, value in values.items():
-                totals[name] += value
+                totals[name] = totals.get(name, 0.0) + value
             by_prompt.setdefault(prompt_id, {name: 0.0 for name in values})
             prompt_counts.setdefault(prompt_id, 0)
             for name, value in values.items():
