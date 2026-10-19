@@ -307,6 +307,8 @@ def _distribution_loss(
     hidden: torch.Tensor,
     device: str,
     lm_head: torch.Tensor,
+    ce_weight: float = 1.0,
+    tv_weight: float = 1.0,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     target_logits = payload["target_logits"][1:].to(device).float()[None]
     if hidden.shape[1] != target_logits.shape[1]:
@@ -324,7 +326,7 @@ def _distribution_loss(
     student_probs = torch.softmax(student_logits, dim=-1)
     target_probs = torch.softmax(target_logits, dim=-1)
     tv = 0.5 * (student_probs - target_probs).abs().sum(dim=-1).mean()
-    loss = ce + tv
+    loss = ce_weight * ce + tv_weight * tv
     return loss, {
         "loss": loss.detach(),
         "distribution_loss": loss.detach(),
@@ -342,11 +344,16 @@ def _cycle_loss(
     loss_mode: str,
     predecessor_mode: str,
     lm_head: torch.Tensor | None,
+    selector_weight: float = 1.0,
+    ce_weight: float = 1.0,
+    tv_weight: float = 1.0,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     if loss_mode == "distribution":
         if lm_head is None:
             raise RuntimeError("distribution loss requires an output head")
-        return _distribution_loss(payload, hidden, device, lm_head)
+        return _distribution_loss(
+            payload, hidden, device, lm_head, ce_weight, tv_weight
+        )
 
     selector_loss, selector_metrics = _selector_loss(
         model,
@@ -362,9 +369,9 @@ def _cycle_loss(
     if lm_head is None:
         raise RuntimeError("hybrid loss requires an output head")
     distribution_loss, distribution_metrics = _distribution_loss(
-        payload, hidden, device, lm_head
+        payload, hidden, device, lm_head, ce_weight, tv_weight
     )
-    loss = selector_loss + distribution_loss
+    loss = selector_weight * selector_loss + distribution_loss
     return loss, {
         **selector_metrics,
         **distribution_metrics,
@@ -382,6 +389,9 @@ def _evaluate_cycles(
     predecessor_mode: str,
     loss_mode: str,
     lm_head: torch.Tensor | None,
+    selector_weight: float = 1.0,
+    ce_weight: float = 1.0,
+    tv_weight: float = 1.0,
 ) -> dict[str, float | dict[str, float]]:
     totals: dict[str, float] = {}
     count = 0
@@ -408,6 +418,9 @@ def _evaluate_cycles(
                 predecessor_mode=predecessor_mode,
                 loss_mode=loss_mode,
                 lm_head=lm_head,
+                selector_weight=selector_weight,
+                ce_weight=ce_weight,
+                tv_weight=tv_weight,
             )
             values = {name: float(tensor) for name, tensor in metrics.items()}
             for name, value in values.items():
@@ -570,6 +583,9 @@ def run(args):
         predecessor_mode=args.predecessor_mode,
         loss_mode=args.loss_mode,
         lm_head=lm_head,
+        selector_weight=args.selector_weight,
+        ce_weight=args.distribution_ce_weight,
+        tv_weight=args.distribution_tv_weight,
     )
     if start_epoch == 0:
         if args.selection_metric == "prefix":
@@ -605,6 +621,9 @@ def run(args):
                     predecessor_mode=args.predecessor_mode,
                     loss_mode=args.loss_mode,
                     lm_head=lm_head,
+                    selector_weight=args.selector_weight,
+                    ce_weight=args.distribution_ce_weight,
+                    tv_weight=args.distribution_tv_weight,
                 )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -635,6 +654,9 @@ def run(args):
             predecessor_mode=args.predecessor_mode,
             loss_mode=args.loss_mode,
             lm_head=lm_head,
+            selector_weight=args.selector_weight,
+            ce_weight=args.distribution_ce_weight,
+            tv_weight=args.distribution_tv_weight,
         )
         validation = (
             1.0 - float(validation_metrics["prefix_accuracy"])
@@ -706,6 +728,9 @@ def run(args):
         "predecessor_mode": args.predecessor_mode,
         "loss_mode": args.loss_mode,
         "lm_head": args.lm_head,
+        "selector_weight": args.selector_weight,
+        "distribution_ce_weight": args.distribution_ce_weight,
+        "distribution_tv_weight": args.distribution_tv_weight,
         "triton_dynamic_conv": args.triton_dynamic_conv,
         "qat_mxfp4": args.qat_mxfp4,
         "steps": step,
@@ -785,6 +810,9 @@ def main():
         default="selector",
     )
     parser.add_argument("--lm-head")
+    parser.add_argument("--selector-weight", type=float, default=1.0)
+    parser.add_argument("--distribution-ce-weight", type=float, default=1.0)
+    parser.add_argument("--distribution-tv-weight", type=float, default=1.0)
     parser.add_argument(
         "--predecessor-mode", choices=("teacher", "predicted"), default="teacher"
     )

@@ -195,6 +195,23 @@ def test_distribution_loss_uses_aligned_full_vocab_logits():
     assert torch.isfinite(metrics["distribution_tv"])
 
 
+def test_distribution_loss_weights_ce_and_tv():
+    torch.manual_seed(23)
+    hidden = torch.randn(1, 2, 4)
+    lm_head = torch.randn(6, 4)
+    payload = {
+        "target_logits": torch.randn(3, 6),
+        "target_greedy": torch.tensor([0, 1, 2]),
+    }
+
+    loss, metrics = _distribution_loss(
+        payload, hidden, "cpu", lm_head, ce_weight=0.1, tv_weight=0.9
+    )
+
+    expected = 0.1 * metrics["distribution_ce"] + 0.9 * metrics["distribution_tv"]
+    torch.testing.assert_close(loss, expected)
+
+
 def test_hybrid_cycle_loss_combines_selector_and_distribution_terms():
     torch.manual_seed(19)
     model = _Model()
