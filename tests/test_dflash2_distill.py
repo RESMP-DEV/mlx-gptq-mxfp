@@ -11,6 +11,8 @@ from mlx_gptq.dflash2_distill import (
     _selector_loss,
     _stratified_indices,
 )
+from mlx_gptq.grid import rtn_quantize_mxfp
+from mlx_gptq.qat import fake_quantize_mxfp4
 
 
 class _Selector:
@@ -129,6 +131,41 @@ def test_lora_linear_starts_equivalent_and_receives_gradients():
     assert module.a.grad is not None
     assert module.b.grad is not None
     assert input.grad is not None
+
+
+def test_qat_lora_uses_mxfp_grid_and_passes_gradients():
+    torch.manual_seed(11)
+    base = torch.nn.Linear(64, 32, bias=False)
+    module = LoRALinear(base, rank=2, alpha=4.0, qat_mxfp4=True)
+    with torch.no_grad():
+        module.b[:, 0] = 0.125
+    input = torch.randn(2, 64, requires_grad=True)
+
+    output = module(input)
+    output.sum().backward()
+
+    effective = base.weight + (module.b @ module.a) * module.scaling
+    _codes, _scales, _biases, expected = rtn_quantize_mxfp(
+        effective.detach().float(), "mxfp4"
+    )
+    torch.testing.assert_close(
+        module(input).detach(),
+        torch.nn.functional.linear(input.detach(), expected.to(base.weight.dtype)),
+        atol=2e-2,
+        rtol=2e-2,
+    )
+    assert module.a.grad is not None
+    assert module.b.grad is not None
+    assert torch.isfinite(module.a.grad).all()
+    assert torch.isfinite(module.b.grad).all()
+
+
+def test_fake_quantize_mxfp4_straight_through_gradient():
+    weight = torch.randn(4, 64, requires_grad=True)
+    quantized = fake_quantize_mxfp4(weight)
+    quantized.sum().backward()
+
+    assert torch.equal(weight.grad, torch.ones_like(weight))
 
 
 def test_install_lora_wraps_draft_linears_but_not_selector_projection():

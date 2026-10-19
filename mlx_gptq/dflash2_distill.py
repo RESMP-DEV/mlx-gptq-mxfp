@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from safetensors.torch import load_file, save_file
 
 from .dflash2_calibrate import _cycle_paths, _load_reference
+from .qat import fake_quantize_mxfp4
 
 
 def _stratified_indices(prompt_ids: list[int], limit: int, seed: int) -> list[int]:
@@ -105,7 +106,9 @@ def _prompt_split(
 
 
 class LoRALinear(torch.nn.Module):
-    def __init__(self, base: torch.nn.Linear, rank: int, alpha: float):
+    def __init__(
+        self, base: torch.nn.Linear, rank: int, alpha: float, qat_mxfp4: bool = False
+    ):
         super().__init__()
         if rank <= 0:
             raise ValueError("LoRA rank must be positive")
@@ -116,6 +119,7 @@ class LoRALinear(torch.nn.Module):
         self.in_features = base.in_features
         self.out_features = base.out_features
         self.scaling = float(alpha) / float(rank)
+        self.qat_mxfp4 = qat_mxfp4
         self.a = torch.nn.Parameter(
             torch.empty(rank, base.in_features, device=base.weight.device)
         )
@@ -126,8 +130,10 @@ class LoRALinear(torch.nn.Module):
         torch.nn.init.zeros_(self.b)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        delta = torch.nn.functional.linear(input, self.b @ self.a)
-        return self.base(input) + delta * self.scaling
+        effective_weight = self.base.weight + (self.b @ self.a) * self.scaling
+        if self.qat_mxfp4:
+            effective_weight = fake_quantize_mxfp4(effective_weight)
+        return torch.nn.functional.linear(input, effective_weight)
 
 
 def _forward(model, payload, device):
@@ -158,7 +164,9 @@ def _forward(model, payload, device):
     return model.norm(hidden)[:, 1:, :]
 
 
-def _install_lora(model: torch.nn.Module, rank: int, alpha: float) -> tuple[int, int]:
+def _install_lora(
+    model: torch.nn.Module, rank: int, alpha: float, qat_mxfp4: bool = False
+) -> tuple[int, int]:
     pending: list[tuple[str, torch.nn.Module]] = [("", model)]
     installed = 0
     trainable = 0
@@ -175,7 +183,7 @@ def _install_lora(model: torch.nn.Module, rank: int, alpha: float) -> tuple[int,
             if not isinstance(child, torch.nn.Linear):
                 pending.append((f"{path}.", child))
                 continue
-            adapter = LoRALinear(child, rank, alpha)
+            adapter = LoRALinear(child, rank, alpha, qat_mxfp4)
             setattr(parent, name, adapter)
             installed += 1
             trainable += adapter.a.numel() + adapter.b.numel()
@@ -240,7 +248,10 @@ def _selector_loss(
     candidate_ids = payload["target_top_ids"][1:].to(device).long()[None, :, :top_k]
     unary = payload["target_top_values"][1:].to(device).float()[None, :, :top_k]
     target_ids = payload["target_greedy"][1:].to(device).long()[None]
-    projected = model.candidate_selector.hidden_projection(hidden)
+    projection_weight = model.candidate_selector.hidden_projection.weight
+    if getattr(model, "qat_mxfp4", False):
+        projection_weight = fake_quantize_mxfp4(projection_weight)
+    projected = torch.nn.functional.linear(hidden, projection_weight)
     successor = model.candidate_selector.successor_codebook(candidate_ids)
     predecessor = payload["anchor"].to(device).long()
     losses = []
@@ -385,6 +396,7 @@ def run(args):
     device = args.device
     torch.manual_seed(args.seed)
     model = _load_reference(args.model, args.dflash_package, device)
+    model.qat_mxfp4 = args.qat_mxfp4
     if args.triton_dynamic_conv:
         import dflash.model as dflash_model
 
@@ -395,7 +407,7 @@ def run(args):
         parameter.requires_grad_(False)
     if args.mode == "lora":
         adapter_modules, adapter_parameters = _install_lora(
-            model, args.lora_rank, args.lora_alpha
+            model, args.lora_rank, args.lora_alpha, args.qat_mxfp4
         )
     else:
         adapter_modules = 0
@@ -578,6 +590,7 @@ def run(args):
         "validation_metrics": validation_metrics,
         "predecessor_mode": args.predecessor_mode,
         "triton_dynamic_conv": args.triton_dynamic_conv,
+        "qat_mxfp4": args.qat_mxfp4,
         "steps": step,
         "elapsed_seconds": time.time() - started,
         "device": device,
@@ -646,6 +659,7 @@ def main():
     )
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--triton-dynamic-conv", action="store_true")
+    parser.add_argument("--qat-mxfp4", action="store_true")
     parser.add_argument("--log-every", type=int, default=32)
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "offline"), default="disabled"
