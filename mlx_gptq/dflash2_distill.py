@@ -459,6 +459,17 @@ def _start_wandb(args: argparse.Namespace, output: Path):
     )
 
 
+def _cuda_memory_snapshot(device: str) -> dict[str, float] | None:
+    if not device.startswith("cuda") or not torch.cuda.is_available():
+        return None
+    return {
+        "allocated_gb": torch.cuda.memory_allocated(device) / 2**30,
+        "max_allocated_gb": torch.cuda.max_memory_allocated(device) / 2**30,
+        "reserved_gb": torch.cuda.memory_reserved(device) / 2**30,
+        "max_reserved_gb": torch.cuda.max_memory_reserved(device) / 2**30,
+    }
+
+
 def run(args):
     device = args.device
     torch.manual_seed(args.seed)
@@ -517,6 +528,9 @@ def run(args):
         optimizer, T_max=max(1, args.epochs * len(ids))
     )
     checkpoint_path = output / "checkpoint.pt"
+    load_memory = _cuda_memory_snapshot(device)
+    if device.startswith("cuda"):
+        torch.cuda.reset_peak_memory_stats(device)
     start_epoch = 0
     step = 0
     best = math.inf
@@ -666,6 +680,7 @@ def run(args):
         _merge_lora(model)
         _remove_lora(model)
     save_file(model.state_dict(), str(output / "model.safetensors"))
+    training_memory = _cuda_memory_snapshot(device)
     receipt = {
         "schema_version": 1,
         "cycles": len(dataset),
@@ -686,6 +701,8 @@ def run(args):
         "steps": step,
         "elapsed_seconds": time.time() - started,
         "device": device,
+        "load_memory": load_memory,
+        "training_memory": training_memory,
         "initial_projection": args.initial_projection,
         "mode": args.mode,
         "lora_rank": args.lora_rank if args.mode == "lora" else None,
