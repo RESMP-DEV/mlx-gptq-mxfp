@@ -58,3 +58,31 @@ passing cases, including rejection of a stale grid after blending.
   source run that emits prescribed-grid metadata.
 - This proves export-grid identity, not live acceptance.
 - No rejected or newly exported candidate is promoted or uploaded.
+
+## End-to-end proof on the matched CPU smoke pair
+
+After the trainer was corrected to write the quantized selector projection into
+`model.safetensors` (`0d50716`), the QAT arm was rerun as
+`fulllogit-prefix-smoke-4-qat-v3` and the full path executed:
+
+```text
+validate_dflash2_run.py --qat --expected-steps 4
+exit 0; 46/46 checkpoint LoRA b updated; 47 prescribed grid pairs
+
+export_rtn_mxfp4.py --qat-source
+exit 0; algorithm qat-prescribed-grid; 47 tensors
+
+mlx_gptq.dflash2_pack --config-root <base model>
+exit 0; 47 calibrated tensors; 128 checkpoint tensors; 1.1 GB
+```
+
+The packed QAT artifact loads through the MLX draft runtime as
+`prequantized: true` with 47 `QuantizedLinear` modules, `uint32` packed weights,
+and E8M0 scales of shape `[256, 160]` on the selector projection. The BF16
+control packs and loads identically.
+
+The two packed checkpoints are byte-identical (`model_sha256
+816e4ad6041cef35c0857be6679ca2efa605962f3c9db0faef09d58fdd02a38f`), because a
+single validation cycle selected the initial head in both arms. That is the
+correct selection behaviour, and it is also why this smoke says nothing about
+QAT versus RTN quality.
