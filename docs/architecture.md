@@ -25,6 +25,7 @@ provenance and non-claims is not accepted.
 | Default branch promotion | `work/dflash2-calibration` is complete; `main` is older | `just quality` green after subtree merges |
 | Old repository retirement | Historical repositories retained read-only as subtree sources; redundant local clones removed | New work targets `mlx-stack` only |
 | Full projection matrix | Dominant activation/GEMM cases qualified; all weights qualified | Extend only when a missing shape owns measured time |
+| Local 27B CCR fallback | Calibrated MXFP4 loopback server qualified at 32 short-context requests | Promote only through source-policy review and idle listener restart |
 
 ## 2026-10-20 work log
 
@@ -42,6 +43,10 @@ provenance and non-claims is not accepted.
   the pushed Qwen parity-tooling branch, and removed the three verified-clean
   redundant local clones. `/Users/kearm/mlx-stack` is the convenience entry to
   the canonical checkout.
+- Measured the local calibrated Qwen3.8-27B MXFP4 artifact through an isolated
+  CCR OpenAI route: 142 aggregate tok/s at 32 short-context requests, but only
+  about two useful concurrent 8k prefills. Receipt:
+  `evidence/2026-10-20-local-27b-ccr-fallback-capacity.md`.
 
 ## Contracts to preserve
 
