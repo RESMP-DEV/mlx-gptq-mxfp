@@ -76,3 +76,21 @@ training; it was stopped and is not an artifact. After repair:
 ```
 
 This update still does not claim model quality or live acceptance.
+
+## Mechanical run gate
+
+`tools/validate_dflash2_run.py` checks expected step count, replay-fidelity
+threshold, exactly 46 nonzero LoRA `b` tensors, and, for QAT, exactly 47
+prescribed code/scale pairs. Validation commands:
+
+```text
+uvx ruff check tools/validate_dflash2_run.py \
+  tests/test_validate_dflash2_run.py
+exit 0
+
+.venv/bin/python -m pytest tests/test_validate_dflash2_run.py -q
+3 passed
+```
+
+The superseded v2 artifact fails the gate with `LoRA b tensors did not update:
+['fc.b']`, as intended.
