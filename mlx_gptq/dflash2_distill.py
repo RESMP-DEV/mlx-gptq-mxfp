@@ -16,6 +16,12 @@ import torch.nn.functional as F
 from safetensors.torch import load_file, save_file
 
 from .dflash2_calibrate import _cycle_paths, _load_reference
+from .dflash2_replay import (
+    PromptCaches,
+    _prompt_order,
+    draft_context_for,
+    replay_fidelity,
+)
 from .qat import fake_quantize_mxfp4
 
 
@@ -150,32 +156,47 @@ def _use_captured_hidden(loss_mode: str, replay_draft: bool) -> bool:
     return loss_mode == "selector" and not replay_draft
 
 
-def _forward(model, payload, device, *, use_selector_hidden: bool = True):
+def _forward(
+    model,
+    payload,
+    device,
+    *,
+    use_selector_hidden: bool = True,
+    cache_state=None,
+    prompt_id=None,
+    cycle_index=None,
+):
+    """Return draft hidden states for one captured cycle.
+
+    When ``cache_state`` is provided, replay uses the runtime ContextOnly cache
+    contract so the training forward matches serving. Otherwise the captured
+    selector hidden state is used for a selector-only shortcut.
+    """
     if use_selector_hidden and "selector_hidden" in payload:
         return payload["selector_hidden"].to(device)
-    noise = payload["noise_embedding"].to(device)
-    raw_context = payload.get("raw_context")
-    projected_context = payload["context"].to(device)
-    context = (
-        model.hidden_norm(model.fc(raw_context.to(device)))
-        if raw_context is not None
-        and raw_context.shape[1] == projected_context.shape[1]
-        and raw_context.shape[-1] == model.fc.in_features
-        else projected_context
-    )
-    position_ids = torch.arange(
-        context.shape[1] + noise.shape[1], device=device
-    ).unsqueeze(0)
-    position_embeddings = model.rotary_emb(noise, position_ids)
-    hidden = noise
-    for layer in model.layers:
-        hidden = layer(
-            hidden_states=hidden,
-            target_hidden=context,
-            position_ids=position_ids,
-            position_embeddings=position_embeddings,
+    if cache_state is not None:
+        return _forward_cached(
+            model, payload, device, cache_state, prompt_id, cycle_index
         )
-    return model.norm(hidden)[:, 1:, :]
+    raise RuntimeError(
+        "draft replay requires a ContextOnly cache; pass cache_state or use "
+        "the captured selector hidden shortcut"
+    )
+
+
+def _forward_cached(model, payload, device, cache_state, prompt_id, cycle_index):
+    """Replay one draft block with the runtime ContextOnly cache contract."""
+    caches, device_cache = cache_state
+    local = {
+        "context": payload["context"].to(device),
+        "raw_context": (
+            payload["raw_context"].to(device)
+            if payload.get("raw_context") is not None
+            else None
+        ),
+        "noise_embedding": payload["noise_embedding"].to(device),
+    }
+    return caches.replay(model, local, int(prompt_id), int(cycle_index))
 
 
 def _install_lora(
@@ -419,11 +440,14 @@ def _evaluate_cycles(
     ce_weight: float = 1.0,
     tv_weight: float = 1.0,
     use_captured_hidden: bool = True,
+    caches=None,
 ) -> dict[str, float | dict[str, float]]:
     totals: dict[str, float] = {}
     count = 0
     by_prompt: dict[int, dict[str, float]] = {}
     prompt_counts: dict[int, int] = {}
+    if caches is None and not use_captured_hidden:
+        caches = PromptCaches(len(model.layers), _prompt_order(dataset))
     model.eval()
     with (
         torch.no_grad(),
@@ -436,6 +460,9 @@ def _evaluate_cycles(
                 payload,
                 device,
                 use_selector_hidden=use_captured_hidden,
+                cache_state=(caches, device) if caches is not None else None,
+                prompt_id=prompt_id,
+                cycle_index=index,
             )
             _loss, metrics = _cycle_loss(
                 model,
@@ -538,6 +565,7 @@ def _training_fingerprint(args: argparse.Namespace) -> dict[str, object]:
         "loss_mode": args.loss_mode,
         "replay_draft": args.replay_draft,
         "qat_mxfp4": args.qat_mxfp4,
+        "fidelity_threshold": args.fidelity_threshold,
         "loss_reduction": args.loss_reduction,
         "selector_weight": args.selector_weight,
         "distribution_ce_weight": args.distribution_ce_weight,
@@ -642,6 +670,18 @@ def run(args):
             raise RuntimeError("checkpoint training fingerprint does not match")
         print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
     use_captured_hidden = _use_captured_hidden(args.loss_mode, args.replay_draft)
+    caches = None
+    fidelity = None
+    if not use_captured_hidden:
+        caches = PromptCaches(len(model.layers), _prompt_order(dataset))
+        fidelity, fidelity_cycles = replay_fidelity(
+            model, dataset, device, limit=args.fidelity_cycles,
+            threshold=args.fidelity_threshold,
+        )
+        print(
+            {"replay_fidelity_cosine": fidelity, "replay_fidelity_cycles": fidelity_cycles},
+            flush=True,
+        )
     started = time.time()
     initial_metrics = _evaluate_cycles(
         dataset,
@@ -655,6 +695,8 @@ def run(args):
         selector_weight=args.selector_weight,
         ce_weight=args.distribution_ce_weight,
         tv_weight=args.distribution_tv_weight,
+        use_captured_hidden=use_captured_hidden,
+        caches=caches,
     )
     if start_epoch == 0:
         if args.selection_metric == "prefix":
@@ -674,13 +716,16 @@ def run(args):
         order = list(ids)
         random.Random(args.seed + epoch).shuffle(order)
         for index in order:
-            payload, _ = dataset[index]
+            payload, prompt_id = dataset[index]
             with torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16):
                 hidden = _forward(
                     model,
                     payload,
                     device,
                     use_selector_hidden=use_captured_hidden,
+                    cache_state=(caches, device) if caches is not None else None,
+                    prompt_id=prompt_id,
+                    cycle_index=index,
                 )
                 loss, _train_metrics = _cycle_loss(
                     model,
@@ -727,6 +772,8 @@ def run(args):
             selector_weight=args.selector_weight,
             ce_weight=args.distribution_ce_weight,
             tv_weight=args.distribution_tv_weight,
+            use_captured_hidden=use_captured_hidden,
+            caches=caches,
         )
         validation = (
             1.0 - float(validation_metrics["prefix_accuracy"])
@@ -810,6 +857,7 @@ def run(args):
         "triton_dynamic_conv": args.triton_dynamic_conv,
         "qat_mxfp4": args.qat_mxfp4,
         "replay_draft": args.replay_draft,
+        "replay_fidelity_cosine": fidelity,
         "steps": step,
         "elapsed_seconds": time.time() - started,
         "device": device,
@@ -900,6 +948,18 @@ def main():
         "--replay-draft",
         action="store_true",
         help="Replay the draft transformer so LoRA adapters receive gradients",
+    )
+    parser.add_argument(
+        "--fidelity-threshold",
+        type=float,
+        default=0.97,
+        help="Minimum median cosine between cached replay and runtime hidden",
+    )
+    parser.add_argument(
+        "--fidelity-cycles",
+        type=int,
+        default=32,
+        help="Cycles sampled for the startup replay fidelity gate",
     )
     parser.add_argument("--log-every", type=int, default=32)
     parser.add_argument(
