@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "name": "qwen3.8-27b-mxfp4",
+  "model": {
+    "id": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_type": "qwen3_5",
+    "weight_bytes": 55562855904,
+    "layers_attr": "model.layers",
+    "checkpoint_model_prefix": "model.language_model",
+    "artifact_layers_prefix": "language_model.model.layers"
+  },
+  "dataset": {
+    "id": "RESMP-DEV/ptq-calibration-corpus",
+    "revision": "ffa2e74b9361d573167373140f10dfd30c69a327",
+    "filename": "data/calibration_256x2048.npy",
+    "sha256": "d7dd281b1f1756a6492361e1dfb0c65fed259f8a3d65eabbcb51809b50bd35d7",
+    "tokenizer": "Qwen/Qwen3.8-27B",
+    "tokenizer_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "engine": {
+    "repository": "https://github.com/RESMP-DEV/mlx-gptq-mxfp.git",
+    "commit": "7131c407af8b8991fb5a8148a49cf2f323c7afd3",
+    "python": "3.13",
+    "accelerate": "1.14.0"
+  },
+  "calibration": {
+    "mode": "mxfp4",
+    "mxfp_algorithm": "safe-scale-search",
+    "bits": 4,
+    "group_size": 32,
+    "nsamples": 256,
+    "seqlen": 2048,
+    "batch_size": 4,
+    "dtype": "bfloat16",
+    "damp": 0.01,
+    "clip": "mse",
+    "seed": 17,
+    "vram_fraction": 0.9,
+    "vram_reserve_gib": 3
+  },
+  "compute": {
+    "minimum_vram_mib": 8000
+  },
+  "output": {
+    "mlx_model_name": "Qwen3.8-27B-MLX-GPTQ-MXFP4",
+    "huggingface_private": true
+  }
+}

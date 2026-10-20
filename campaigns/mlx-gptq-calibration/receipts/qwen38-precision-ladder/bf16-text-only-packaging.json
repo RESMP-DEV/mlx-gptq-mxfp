@@ -1,0 +1,45 @@
+{
+  "architectures": [
+    "Qwen3_5ForCausalLM"
+  ],
+  "non_claims": [
+    "This flattens config/key layout only; BF16 weight values are unchanged.",
+    "Serves as the matched text-generation reference for quantized variants."
+  ],
+  "output": "/root/model-data/artifacts/Qwen3.8-27B-BF16-text-only",
+  "output_files": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "config.json": "ce3355b5de149b75fbd497d26acc56e66959d08da7e1db509cf058ad6d334311",
+    "generation_config.json": "e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+    "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "model-00001-of-00012.safetensors": "54d83c1d36631de231876217a8e0c2483eccee8746369a482b79442bdfc5d958",
+    "model-00002-of-00012.safetensors": "87dafceb9918be621887cbe83e7bc4889c0e6fff5a8961567bdfc33014e6a770",
+    "model-00003-of-00012.safetensors": "691f99ecbe4df5adbaebc0b3c9437cfbb3d0a78c149c019df88ebedc3bf877b8",
+    "model-00004-of-00012.safetensors": "15fe184643fec5136c400e4c70afc761d13e3c134f165e7abdaf72554f53eec0",
+    "model-00005-of-00012.safetensors": "b9a56ae03b6eeee1f9e974c1549a8f96a66fde487217e118d088700240331a23",
+    "model-00006-of-00012.safetensors": "36c0c6333b9b93c68e0e4d8b3d2d6518fb79e2d90d3a6f3e4fd42a1d5c15675c",
+    "model-00007-of-00012.safetensors": "0d6b73c675f1255785000a5a114e6b5f41dfda020b679da1e9e8b6c05a84f349",
+    "model-00008-of-00012.safetensors": "07ba3e41cb1288d5e0c10de8f7ccc4e1de55f839bc50a57a56cfa087fde7f5a6",
+    "model-00009-of-00012.safetensors": "b7b77d1e82aa07b84ad32d3d34f8ab2aebc678acc59bb1509e7d5177fa50d91e",
+    "model-00010-of-00012.safetensors": "b0cb57a8ee3bca5a058c57eb41a343d53ddaa9df7cf000bef0817550c6f92acc",
+    "model-00011-of-00012.safetensors": "740f3f1878e139e3d8a4d997c708a51cabb482dbe349c328b9b759c3aa4f3d86",
+    "model-00012-of-00012.safetensors": "6a7bc2bc63805cd1ab9bbb72f3da46058bf614511ca07d591beea742f57b43ab",
+    "model.safetensors.index.json": "3e0496874b0ddb49137b87178b4b179db554670b61ed3c8db781d2ea1d04467a",
+    "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+  },
+  "recorded_at": "2026-10-20T00:09:33+00:00",
+  "schema": "mlx-gptq-calibration/bf16-text-only-flatten/1",
+  "shard_count": 12,
+  "source": "/root/model-data/Qwen3.8-27B-bf16",
+  "tensor_count": 851,
+  "tokenizer_files": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+  },
+  "total_size_bytes": 53791996928
+}

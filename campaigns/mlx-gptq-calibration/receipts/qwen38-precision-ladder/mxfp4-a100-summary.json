@@ -1,0 +1,47 @@
+{
+  "elapsed_seconds": 2681.58,
+  "llmcompressor_record_sha256": "ae6b86e746c1173d72de4ed77e1c90088d120c812a254304614ee007ca2069d5",
+  "non_claims": [
+    "This receipt proves A100 quantization and packaging execution, not model quality or serving throughput."
+  ],
+  "output_provenance": {
+    "raw_model_safetensors_sha256": {
+      "source": "measured in this container from the quantization output",
+      "value": "7efcd51f35ba23a60bc0ac950a40d52f94014c6636595f3e39f045ac5324a5d7"
+    },
+    "text_model_config_sha256": {
+      "source": "measured in this container from the packaged artifact",
+      "value": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055"
+    },
+    "text_model_safetensors_sha256": {
+      "source": "measured in this container from the packaged artifact",
+      "value": "1b6cf393189f59763dbd330cf85fefd2508cfca63db7c13aaea8d53da71e1dd7"
+    }
+  },
+  "quantization_gpu": "NVIDIA A100-SXM4-40GB",
+  "raw_model_sha256": "7efcd51f35ba23a60bc0ac950a40d52f94014c6636595f3e39f045ac5324a5d7",
+  "recorded_at": "2026-10-20T00:39:39+00:00",
+  "runtime": {
+    "causal_conv1d": "1.7.0",
+    "compressed_tensors": "0.19.0",
+    "flash_linear_attention": "0.5.2",
+    "llmcompressor": "0.14.0",
+    "torch": "2.14.0+cu130",
+    "transformers": "5.17.0"
+  },
+  "runtime_provenance": {
+    "llmcompressor_record_sha256": {
+      "a100_measured": "ae6b86e746c1173d72de4ed77e1c90088d120c812a254304614ee007ca2069d5",
+      "b550_pinned": "77d00e684fa163de37f78d37f08be491378d8271e98c4f73367d0c449ec70b8c"
+    },
+    "torch": {
+      "a100_measured": "2.14.0+cu130",
+      "b550_pinned": "2.14.0"
+    }
+  },
+  "schema": "mlx-gptq-calibration/modal-mxfp4-quantize/1",
+  "source_manifest": "968425eaa11944b2b8d285acb995c034c52ccdc057a661991abfb955aa377182",
+  "source_status": "verified",
+  "text_config_sha256": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+  "text_model_sha256": "1b6cf393189f59763dbd330cf85fefd2508cfca63db7c13aaea8d53da71e1dd7"
+}

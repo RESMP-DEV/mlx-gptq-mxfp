@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "hypothesis": "QAT-derived 4-bit weights plus BF16 routing preserve more BF16 quality than uniform low-bit packing; parent-router transplantation is an independent compatibility test.",
+  "gemma4_variants": [
+    {"id": "qat-bf16", "weights": "qat-bf16", "router": "qat-bf16"},
+    {"id": "qat-gptq-router4", "weights": "qat-gptq-mxfp4", "router": "qat-rtn-mxfp4"},
+    {"id": "qat-gptq-router8", "weights": "qat-gptq-mxfp4", "router": "qat-8bit"},
+    {"id": "qat-gptq-routerbf16", "weights": "qat-gptq-mxfp4", "router": "qat-bf16"},
+    {"id": "qat-gptq-base-routerbf16", "weights": "qat-gptq-mxfp4", "router": "base-bf16"},
+    {"id": "base-bf16", "weights": "base-bf16", "router": "base-bf16"},
+    {"id": "base-gptq-routerbf16", "weights": "base-gptq-mxfp4", "router": "base-bf16"}
+  ],
+  "qwen36_variants": [
+    {"id": "base-bf16", "weights": "base-bf16", "router": "base-bf16"},
+    {"id": "base-gptq-router4", "weights": "base-gptq-mxfp4", "router": "base-rtn-mxfp4"},
+    {"id": "base-gptq-routerbf16", "weights": "base-gptq-mxfp4", "router": "base-bf16"}
+  ],
+  "joyai_variants": [
+    {"id": "qat-bf16", "weights": "qat-bf16", "router": "qat-bf16"},
+    {"id": "qat-official-int4", "weights": "qat-rtn-int4-g64", "router": "qat-bf16"},
+    {"id": "qat-gptq-routerbf16", "weights": "qat-gptq-mxfp4", "router": "qat-bf16"},
+    {"id": "qat-gptq-router4", "weights": "qat-gptq-mxfp4", "router": "qat-rtn-mxfp4"}
+  ],
+  "quality_metrics": [
+    "heldout_nll",
+    "perplexity",
+    "kl_to_bf16",
+    "top1_token_agreement",
+    "fixed_prompt_token_hashes"
+  ],
+  "routing_metrics": [
+    "top8_set_overlap",
+    "top8_exact_set_agreement",
+    "top1_expert_agreement",
+    "routing_weight_js_divergence",
+    "eighth_to_ninth_margin",
+    "expert_load_histogram_divergence"
+  ],
+  "performance_metrics": [
+    "serialized_bytes",
+    "peak_resident_bytes",
+    "prefill_tokens_per_second",
+    "decode_tokens_per_second",
+    "first_token_seconds"
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "calibration": {
+    "file": "data/calibration_256x2048.npy",
+    "repository": "RESMP-DEV/ptq-calibration-corpus",
+    "revision": "ffa2e74b9361d573167373140f10dfd30c69a327",
+    "sample_order": "original",
+    "sha256": "d7dd281b1f1756a6492361e1dfb0c65fed259f8a3d65eabbcb51809b50bd35d7",
+    "shape": [
+      256,
+      2048
+    ]
+  },
+  "engine_identity": {
+    "installed_build_claim": "llmcompressor 0.14.0 with installation RECORD SHA-256 77d00e684fa163de37f78d37f08be491378d8271e98c4f73367d0c449ec70b8c",
+    "recipe_reference_commit": "6e4b96e467c243cb988e87c0fe97b4d51359f983",
+    "record_hash_measurement": "measured from the live B550 environment after quantization; the historical quantization receipt predates this field"
+  },
+  "environments": {
+    "note": "Quantization and serving intentionally use two separate pinned environments. The compressed-tensors MXFP4A16 artifact is a serialized checkpoint consumed by vLLM; it does not carry the llm-compressor runtime. Version differences across the two envs are by design, not a reproducibility defect, and each receipt records its own environment.",
+    "quantization": {
+      "llmcompressor": "0.14.0",
+      "path": "/home/kearm/envs/qwen38-mxfp4/.venv",
+      "torch": "2.14.0+cu130",
+      "torch_version_cuda": "13.0",
+      "transformers": "5.17.0"
+    },
+    "serving": {
+      "path": "/home/kearm/envs/qwen38-vllm/.venv",
+      "torch": "2.13.0+cu130",
+      "torch_version_cuda": "13.0",
+      "transformers": "5.19.0",
+      "vllm": "0.32.0"
+    }
+  },
+  "execution_host": {
+    "driver_version": "595.99.02",
+    "gpus": [
+      {
+        "compute_capability": "8.6",
+        "name": "NVIDIA GeForce RTX 3090 Ti"
+      }
+    ],
+    "host_nvcc_build": "CUDA 12.4",
+    "host_torch_cuda": "13.0",
+    "hostname": "b550",
+    "toolchain_note": "The host system NVCC is 12.4; both conda/venv PyTorch wheels are cu130 builds reporting torch.version.cuda 13.0. NVCC and the PyTorch wheel CUDA runtime are separate layers and are not required to match.",
+    "torch_wheel_cuda_tag": "cu130"
+  },
+  "local_verification": {
+    "commands": [
+      "uvx ruff check . --fix",
+      "uvx ruff format .",
+      "uvx ruff check .",
+      "uvx ruff format --check .",
+      "uv run python -m unittest discover -s tests"
+    ],
+    "model_checkpoint_independence": "the model source is the HFD-verified snapshot in source-hfd-verification.json, not this pipeline Git worktree",
+    "pipeline_worktree_dirty_during_execution": true,
+    "repository_base_revision": "bcfb5a3",
+    "unit_tests_passed": 54
+  },
+  "non_claims": [
+    "This does not prove W4A4 MXFP4 tensor-core execution; Ampere uses Marlin W4A16 weight-only execution.",
+    "This does not prove quantization accuracy, BF16 parity, benchmark scores, serving throughput, or long-context stability.",
+    "The superseded text-only artifact must not be used because its tokenizer differs from the pinned source checkpoint.",
+    "The Transformers warning about the upstream Qwen pretokenizer regex remains observable in vLLM; this run intentionally preserves the pinned source tokenizer rather than applying a runtime rewrite."
+  ],
+  "other_non_release_directories": {
+    "source_tokenizer_v1": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only-source-tokenizer; superseded by the campaign-hash-bound v3 packaging pass",
+    "source_tokenizer_v2_partial": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only-source-tokenizer-v2; incomplete after a deliberate hash-mismatch failure, do not use",
+    "source_tokenizer_v3": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only-source-tokenizer-v3; superseded by atomic campaign-bound v4 packaging"
+  },
+  "quality_verdict": {
+    "accuracy": "not yet qualified against a matched BF16 control",
+    "operational": "usable for CUDA/vLLM pilot inference with the source-tokenizer artifact",
+    "reason": "one coherent deterministic generation and byte-identical tokenizer provenance do not measure perplexity, task accuracy, parity, or throughput"
+  },
+  "quantization": {
+    "activation_order": "static",
+    "algorithm": "GPTQ",
+    "compressed_linear_tensors": 496,
+    "damping": 0.01,
+    "elapsed_seconds": 3606.239,
+    "format": "compressed-tensors",
+    "group_size": 32,
+    "post_run_verification": "quantization-post-run-verification.json",
+    "preflight_receipt": "runtime-source-verify-v3.json",
+    "raw_model_sha256": "fc5459be218d68b1f2ed59437462ff4aecab40ef74fa81bf46d2cb0a14527e11",
+    "raw_output": "/home/kearm/models/Qwen3.8-27B-compressed-tensors-MXFP4A16-GPTQ",
+    "receipt": "quantization.json",
+    "scheme": "MXFP4A16"
+  },
+  "recommended_artifact": {
+    "architecture": "Qwen3_5ForCausalLM",
+    "config_sha256": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+    "model_safetensors_bytes": 18027280824,
+    "model_sha256": "d65f88af3ae9b22962abae6a4c47bef153490cbee237e0be008075f9edaa7fdf",
+    "path": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only-source-tokenizer-v4",
+    "receipt": "text-only-packaging-source-tokenizer-v4.json",
+    "tokenizer_source": "byte-identical to the verified Qwen checkpoint for all five tokenizer files"
+  },
+  "recorded_at": "2026-10-19T05:52:00-07:00",
+  "schema": "mlx-gptq-calibration/qwen3.8-27b-mxfp4-vllm-summary/1",
+  "service_restoration": {
+    "health_endpoint": "http://127.0.0.1:1236/health",
+    "health_status": "healthy",
+    "service": "sindexer-embed-gpu@0.service",
+    "state": "active"
+  },
+  "source": {
+    "local_path": "/home/kearm/training/models/Qwen3.8-27B-1d4bf0f",
+    "pipeline_content_manifest_sha256": "968425eaa11944b2b8d285acb995c034c52ccdc057a661991abfb955aa377182",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "verification": "source-hfd-verification.json"
+  },
+  "superseded_artifact": {
+    "path": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only",
+    "reason": "llm-compressor rewrote tokenizer.json and tokenizer_config.json; do not use this artifact",
+    "receipt": "text-only-packaging-superseded.json",
+    "tokenizer_regression": {
+      "fixed_token_ids": [
+        153540
+      ],
+      "source_token_ids": [
+        153540
+      ],
+      "superseded_token_ids": [
+        58069,
+        42201
+      ],
+      "text_unicode_escapes": "\\u0928\\u0940"
+    }
+  },
+  "updated_at": "2026-10-19T08:37:00-07:00",
+  "vllm_validation": {
+    "artifact_hashes": {
+      "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+      "config.json": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+      "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+      "model.safetensors": "d65f88af3ae9b22962abae6a4c47bef153490cbee237e0be008075f9edaa7fdf",
+      "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+      "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+      "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+    },
+    "configuration": {
+      "enforce_eager": true,
+      "gpu_memory_utilization": 0.82,
+      "max_model_len": 512,
+      "max_num_batched_tokens": 512,
+      "tensor_parallel_size": 1
+    },
+    "exit_code": 0,
+    "finish_reason": "length",
+    "generation_elapsed_seconds": 1.346,
+    "output": " Paris.\nThe capital of Germany is Berlin.\nThe capital of Italy is",
+    "prompt": "The capital of France is",
+    "receipt": "vllm-validation-source-tokenizer-v4-final.json",
+    "receipt_fields": [
+      "runtime",
+      "GPU",
+      "model identity",
+      "quantization config",
+      "generation settings",
+      "prompt",
+      "output",
+      "token IDs",
+      "finish reason",
+      "generation timing"
+    ],
+    "settings": {
+      "dtype": "bfloat16",
+      "enforce_eager": true,
+      "gpu_memory_utilization": 0.82,
+      "max_model_len": 512,
+      "max_num_batched_tokens": 512,
+      "max_tokens": 16,
+      "seed": 17
+    },
+    "startup_log": "vllm-validation-source-tokenizer-v4-hash-bound.log",
+    "startup_log_evidence": {
+      "kernel_mode_line": "MarlinMxFp4LinearKernel is a weight-only (A16) kernel; the requested activation quantization ... is ignored.",
+      "kv_cache_line": "Available KV cache memory: 1.65 GiB",
+      "model_memory_line": "Model loading took 17.09 GiB memory",
+      "provenance": "verbatim stderr/stdout captured from the live vLLM process on B550; not emitted by the validator JSON writer",
+      "quantization_kernel_line": "Using MarlinMxFp4LinearKernel for MXFP4 GEMM",
+      "resolved_architecture_line": "Resolved architecture: Qwen3_5ForCausalLM"
+    },
+    "startup_log_receipt": "vllm-validation-source-tokenizer-v4-hash-bound.log",
+    "version": "0.32.0"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "calibration_shape": [
+    256,
+    2048
+  ],
+  "campaign": "qwen3.8-27b-mxfp4-vllm",
+  "non_claims": [
+    "This verify-only run proves preflight identity and runtime pinning; it does not rerun quantization."
+  ],
+  "purpose": "machine-written preflight before GPU gate/schema renaming; superseded by v3",
+  "receipt_status": "superseded",
+  "recorded_at": "2026-10-19T07:16:58-07:00",
+  "runtime": {
+    "causal_conv1d": "1.7.0",
+    "compressed_tensors": "0.19.0",
+    "flash_linear_attention": "0.5.2",
+    "llmcompressor": "0.14.0",
+    "llmcompressor_record_sha256": "77d00e684fa163de37f78d37f08be491378d8271e98c4f73367d0c449ec70b8c",
+    "torch": "2.14.0",
+    "transformers": "5.17.0"
+  },
+  "schema": "mlx-gptq-calibration/cuda-mxfp4-verify-only/1",
+  "source_model": {
+    "failures": [],
+    "output": "/home/kearm/training/models/Qwen3.8-27B-1d4bf0f",
+    "pipeline_content_manifest_sha256": "968425eaa11944b2b8d285acb995c034c52ccdc057a661991abfb955aa377182",
+    "repo": "Qwen/Qwen3.8-27B",
+    "requested_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "resolved_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "status": "verified"
+  },
+  "superseded_by": "runtime-source-verify-v3.json"
+}

@@ -1,0 +1,17 @@
+{
+  "excludes": [],
+  "failures": [],
+  "file_count": 32,
+  "includes": [],
+  "manifest_sha256": "3f7f666dfa59f7b7bbc761a2dc3bbf122ebffc112a872ff11983c3c95f76d390",
+  "mode": "full",
+  "output": "/home/kearm/training/models/Qwen3.8-27B-1d4bf0f",
+  "repo": "Qwen/Qwen3.8-27B",
+  "repo_type": "model",
+  "requested_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "resolved_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "schema": "mlx-gptq-calibration/hfd-source-verification/1",
+  "status": "verified",
+  "total_bytes": 55586114863,
+  "verified_at": "2026-10-18T20:13:57.338692+00:00"
+}

@@ -1,0 +1,39 @@
+{
+  "architectures": [
+    "Qwen3_5ForCausalLM"
+  ],
+  "campaign": "qwen3.8-27b-mxfp4-vllm",
+  "non_claims": [
+    "This packaging pass changes config/key layout only; it does not alter packed values.",
+    "Live generation and parity remain separate validation gates."
+  ],
+  "output": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only-source-tokenizer",
+  "output_files": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "config.json": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+    "generation_config.json": "df6f86c3fdce573ecdb55cec35f502ddda70e70abe78288a78164aef120232e7",
+    "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "model.safetensors": "d65f88af3ae9b22962abae6a4c47bef153490cbee237e0be008075f9edaa7fdf",
+    "model.safetensors.index.json": "3cd8383312517745fda102ce43ed177e168305b0579ae46f1598c18edf570802",
+    "recipe.yaml": "6a0a36332e217bc466ea87625a40e1bfc5814963485198c8db905cdc83061d93",
+    "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+  },
+  "packed_linear_tensors": 496,
+  "recorded_at": "2026-10-19T05:47:14-0700",
+  "scale_tensors": 496,
+  "schema": "mlx-gptq-calibration/mxfp4-text-only-packaging/1",
+  "source": "/home/kearm/models/Qwen3.8-27B-compressed-tensors-MXFP4A16-GPTQ",
+  "superseded_by": "text-only-packaging-source-tokenizer-v3.json",
+  "supersession_reason": "later pass binds campaign tokenizer hashes and indexed tensor layout",
+  "tensor_count": 1347,
+  "tokenizer_files": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+  },
+  "tokenizer_source": "/home/kearm/training/models/Qwen3.8-27B-1d4bf0f"
+}

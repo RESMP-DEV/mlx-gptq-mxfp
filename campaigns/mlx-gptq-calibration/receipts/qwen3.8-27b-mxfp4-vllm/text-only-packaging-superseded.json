@@ -1,0 +1,29 @@
+{
+  "architectures": [
+    "Qwen3_5ForCausalLM"
+  ],
+  "campaign": "qwen3.8-27b-mxfp4-vllm",
+  "non_claims": [
+    "This packaging pass changes config/key layout only; it does not alter packed values.",
+    "Live generation and parity remain separate validation gates."
+  ],
+  "output": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only",
+  "output_files": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "config.json": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+    "generation_config.json": "df6f86c3fdce573ecdb55cec35f502ddda70e70abe78288a78164aef120232e7",
+    "model.safetensors": "d65f88af3ae9b22962abae6a4c47bef153490cbee237e0be008075f9edaa7fdf",
+    "model.safetensors.index.json": "3cd8383312517745fda102ce43ed177e168305b0579ae46f1598c18edf570802",
+    "recipe.yaml": "6a0a36332e217bc466ea87625a40e1bfc5814963485198c8db905cdc83061d93",
+    "tokenizer.json": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+    "tokenizer_config.json": "bee8eba30f0eb4af73c0fe2cd06d0f89b657d7819941c438157ec42f7c80ea87"
+  },
+  "packed_linear_tensors": 496,
+  "recorded_at": "2026-10-19T05:35:22-0700",
+  "scale_tensors": 496,
+  "schema": "mlx-gptq-calibration/mxfp4-text-only-packaging/1",
+  "source": "/home/kearm/models/Qwen3.8-27B-compressed-tensors-MXFP4A16-GPTQ",
+  "superseded_by": "text-only-packaging-source-tokenizer-v3.json",
+  "supersession_reason": "saved tokenizer differs from pinned source",
+  "tensor_count": 1347
+}

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "model_max_context_tokens": 262144,
+  "sliding_attention_window_tokens": 1024,
+  "context_checkpoints": [1024, 8192, 65536, 131072, 196608, 262144],
+  "tail_predictions_per_checkpoint": 256,
+  "general_text_control": {
+    "source": "openbmb/Ultra-FineWeb-L1",
+    "revision": "10b9ba18466215c0ba495299dfffd798af1027f2",
+    "config": "CC-MAIN-2025-51",
+    "source_shards": "data/CC-MAIN-2025-51/CC-MAIN-2025-51-part-0001-through-0010-of-1000.parquet",
+    "selection_seed": "gemma4-long-context-holdout-v1",
+    "minimum_stream_tokens": 1000000,
+    "calibration_overlap_policy": "zero shared normalized 20-word shingles"
+  },
+  "agentic_coding_primary": {
+    "source_index": "OpenMOSS-Team/SWE-bench-Science",
+    "source_index_revision": "7e7084280fdf5d21811ff04c7acb0b738984c705",
+    "source_index_role": "repository URL, base commit, and source-license selection only",
+    "repositories": [
+      "patrick-kidger/diffrax@56d78e1acbdc9c1493caef17a34777931430f3bf",
+      "pydata/xarray@0b071e369a88f6672accc2a99c40d3b4b334f2f9",
+      "cvxpy/cvxpy@5f57b6408864caab207c28f773a14c6261689abe",
+      "Project-MONAI/MONAI@18daff1d8b26002b02de526cc19b92a9a4907f89",
+      "pyscf/pyscf@802cd37e9dc6abb52f30d84bb422b6ee15493fc9",
+      "jcmgray/quimb@79594e405ac72da908cdd7a1058911afc256c483"
+    ],
+    "source_license": "Apache-2.0",
+    "selection_seed": "agentic-coding-long-context-v1",
+    "target_chars_per_repository": 1250000,
+    "selected_files": 788,
+    "combined_bytes": 6504524,
+    "gemma4_tokens_without_bos": 2429702,
+    "combined_sha256": "e615a4149b1b16e5327d8cf79cbb70b07a4007c29cc2302ffc13291cc36455cd",
+    "published_dataset_revision": "6ef2bbf949b94192ee8bb78d45a2fc840a10cff5",
+    "content_mix_by_characters": {
+      "source": 0.55,
+      "tests": 0.25,
+      "docs": 0.2
+    },
+    "excluded_material": [
+      "benchmark_task_prompts",
+      "verifier_material",
+      "agent_trajectories",
+      "answer_patches"
+    ],
+    "calibration_overlap_policy": "zero shared normalized 20-word shingles per selected file"
+  },
+  "tracks": {
+    "advertised_capacity": {
+      "required_context_tokens": 262144,
+      "checks": ["load", "prefill_completion", "finite_tail_logits", "no_oom"]
+    },
+    "distribution_fidelity": {
+      "reference": "qat-bf16",
+      "report_separately_by_corpus": ["general_text_control", "agentic_coding_primary"],
+      "metrics": [
+        "mean_kl",
+        "p99_kl",
+        "p99_9_kl",
+        "top1_token_agreement",
+        "paired_perplexity_ratio"
+      ]
+    },
+    "effective_context": {
+      "tasks": ["passkey_retrieval", "multi_needle_retrieval", "long_document_qa"],
+      "needle_depth_fractions": [0.1, 0.5, 0.75, 0.9],
+      "metrics": ["exact_match", "answer_f1", "failure_onset_context"]
+    }
+  },
+  "runtime_roles": {
+    "llama_cpp": "QAT BF16 authority and matched GGUF distribution trace with partial GPU offload",
+    "cuda": "fast Q4 and hybrid screening on the two RTX 3090 Ti GPUs",
+    "mlx": "final GPTQ MXFP4 artifact validation on Apple silicon"
+  }
+}

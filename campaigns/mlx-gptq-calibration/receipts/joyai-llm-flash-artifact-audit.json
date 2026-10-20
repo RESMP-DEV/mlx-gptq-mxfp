@@ -1,0 +1,53 @@
+{
+  "recorded_at": "2026-08-22",
+  "qat_evidence": {
+    "report": "https://arxiv.org/html/2604.03044v2#S4.SS1",
+    "method": "fake INT4 quantize-dequantize operators with straight-through estimators and high-precision master weights",
+    "export_claim": "QAT supports simple round-to-nearest low-bit quantization",
+    "repository_pdf_note": "the PDF bundled in the pinned BF16 repository predates or omits the v2 quantization section; the current arXiv v2 is the primary QAT provenance source"
+  },
+  "bf16": {
+    "id": "jdopensource/JoyAI-LLM-Flash",
+    "revision": "8d31d53f43de15f3bd5e34fea03bd8e186611fc8",
+    "safetensors_files": 42,
+    "safetensors_bytes": 98575966632,
+    "tensor_count": 30530,
+    "parameter_count": 49286094592
+  },
+  "int4": {
+    "id": "jdopensource/JoyAI-LLM-Flash-INT4",
+    "revision": "8778cd62685ffd7f1856d1a3de8eaca26aa6c3e5",
+    "safetensors_files": 42,
+    "safetensors_bytes": 30862354128,
+    "tensor_count": 90434,
+    "quant_method": "compressed-tensors",
+    "format": "pack-quantized",
+    "weight_bits": 4,
+    "group_size": 64,
+    "symmetric": true,
+    "observer": "minmax",
+    "packed_expert_projection_count": 29952,
+    "packed_expert_projection_derivation": "39 MoE layers x 256 routed experts x 3 projections",
+    "declared_float_exclusions": [
+      "lm_head",
+      "self_attn",
+      "shared_experts",
+      "direct dense-layer MLP projections"
+    ]
+  },
+  "router_identity": {
+    "pattern": "\\.mlp\\.gate\\.(weight|e_score_correction_bias)$",
+    "moe_layers": 39,
+    "tensor_count_each": 78,
+    "tensor_bytes_each": 40914432,
+    "dtype_each": "BF16",
+    "same_names": true,
+    "exact_sha256_matches": 78,
+    "sorted_name_and_tensor_sha256_manifest": "68f98a956f51b88e4904eb788bfaae70a173b2c6c34b33256b1309775d2ba7f7",
+    "mismatches": []
+  },
+  "interpretation": {
+    "demonstrated": "QAT-derived low-bit routed experts with the same QAT router retained byte-identically in BF16",
+    "not_demonstrated": "transplanting a router from a separately trained non-QAT parent checkpoint"
+  }
+}

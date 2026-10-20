@@ -1,0 +1,42 @@
+{
+  "checked_at": "2026-08-22T16:58:04-07:00",
+  "calibration": {
+    "bytes": 4194432,
+    "local_path": "/Users/kearm/datasets/publish/ptq-calibration-corpus/data/calibration_256x2048.npy",
+    "sha256": "d7dd281b1f1756a6492361e1dfb0c65fed259f8a3d65eabbcb51809b50bd35d7",
+    "shape": [256, 2048],
+    "tokenizer": "Qwen/Qwen3.8-27B"
+  },
+  "dataset": {
+    "gated": false,
+    "id": "RESMP-DEV/ptq-calibration-corpus",
+    "private": false,
+    "revision": "ffa2e74b9361d573167373140f10dfd30c69a327"
+  },
+  "engine": {
+    "commit": "7131c407af8b8991fb5a8148a49cf2f323c7afd3",
+    "tests_passed": 33,
+    "tests_skipped": 0
+  },
+  "model": {
+    "architecture": "Qwen3_5ForConditionalGeneration",
+    "gated": false,
+    "id": "Qwen/Qwen3.8-27B",
+    "language_layers": 64,
+    "private": false,
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "weight_bytes": 55562855904,
+    "weight_shards": 18
+  },
+  "reachable_cuda_probe": {
+    "disk_free_bytes": 1280912662528,
+    "driver": "595.84",
+    "gpu_count": 1,
+    "gpu_name": "NVIDIA GeForce RTX 5070 Laptop GPU",
+    "host": "strix",
+    "meets_campaign_requirement": true,
+    "solver_vram_gb": 4.2,
+    "vram_free_mib": 7545,
+    "vram_mib": 8151
+  }
+}

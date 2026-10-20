@@ -1,0 +1,66 @@
+{
+  "gpus": [
+    {
+      "capability": [
+        8,
+        0
+      ],
+      "index": 0,
+      "name": "NVIDIA A100-SXM4-80GB",
+      "total_bytes": 85118156800
+    }
+  ],
+  "holdout": {
+    "bytes": 6504524,
+    "path": "/root/model-data/holdout/data/heldout/agentic-coding/agentic-coding-long-context.txt",
+    "sha256": "e615a4149b1b16e5327d8cf79cbb70b07a4007c29cc2302ffc13291cc36455cd"
+  },
+  "identity": {
+    "architectures": [
+      "Qwen3_5ForCausalLM"
+    ],
+    "config_sha256": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+    "model_type": "qwen3_5_text",
+    "quantization_config_present": true,
+    "quantization_format": "mxfp4-pack-quantized",
+    "shard_count": 1,
+    "shard_sha256": {
+      "model.safetensors": "1b6cf393189f59763dbd330cf85fefd2508cfca63db7c13aaea8d53da71e1dd7"
+    }
+  },
+  "label": "mxfp4-gptq",
+  "mode": "throughput",
+  "model": "/root/model-data/artifacts/Qwen3.8-27B-MXFP4A16-GPTQ-text-only",
+  "non_claims": [
+    "Perplexity is held-out text NLL on the agentic-coding corpus; it is not a task or agentic score.",
+    "Throughput is single-request decode under vLLM; it is not batched serving capacity.",
+    "One variant, one GPU, one run; no cross-host or cross-protocol pooling."
+  ],
+  "platform": "Linux-4.19.0-gvisor-x86_64-with-glibc2.39",
+  "python": "3.12.1",
+  "recorded_at": "2026-10-20T02:26:46+00:00",
+  "runtime": {
+    "torch": "2.13.0+cu130",
+    "transformers": "5.19.0",
+    "vllm": "0.32.0"
+  },
+  "schema": "mlx-gptq-calibration/variant-bench/1",
+  "throughput": {
+    "decode_seconds": 2.0809,
+    "finish_reason": "length",
+    "generated_tokens": 128,
+    "max_tokens": 128,
+    "output_preview": "\n\nA transformer attention head is a fundamental component of the Transformer architecture, which is widely used in natural language processing (NLP) and other sequence-to-sequence tasks. The attention",
+    "prompt": "Explain how a transformer attention head works.",
+    "settings": {
+      "dtype": "bfloat16",
+      "enforce_eager": false,
+      "gpu_memory_utilization": 0.85,
+      "max_model_len": 4096,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 128,
+      "seed": 17
+    },
+    "tokens_per_second": 61.51
+  }
+}

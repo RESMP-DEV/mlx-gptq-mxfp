@@ -1,0 +1,34 @@
+{
+  "assistant_companion": {
+    "architecture": "Gemma4AssistantForCausalLM",
+    "dense": true,
+    "id": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant",
+    "layers": 4,
+    "revision": "9537141506fe8875b3ed45b264af13580cb29166",
+    "weight_bytes": 839427840
+  },
+  "checked_at": "2026-08-22T17:10:00-07:00",
+  "corpus": {
+    "id": "RESMP-DEV/ptq-calibration-corpus",
+    "revision": "f73806747b6d90b7a4ba1c1f20b027345b3d4354",
+    "sha256": "244a35f5289efad6397342a6782350e464a5f180d8406d2969200722d7da5fb9"
+  },
+  "engine": {
+    "commit": "7fe79676bb717b4a282bf3aa11096f617f8f154f",
+    "gemma4_switch_glu_mapping_verified": true,
+    "tests_passed": 12,
+    "tests_skipped": 3
+  },
+  "moe_target": {
+    "active_parameters": 3800000000,
+    "architecture": "Gemma4ForConditionalGeneration",
+    "experts": 128,
+    "id": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+    "layers": 30,
+    "parameter_count": 26544131376,
+    "revision": "f1e06dc520982d9b9edd76859fdb7ab209449949",
+    "top_k_experts": 8,
+    "weight_bytes": 51611872412,
+    "weight_shards": 2
+  }
+}

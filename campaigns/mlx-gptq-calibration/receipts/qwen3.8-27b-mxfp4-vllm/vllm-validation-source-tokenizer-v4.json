@@ -1,0 +1,102 @@
+{
+  "architectures": [
+    "Qwen3_5ForCausalLM"
+  ],
+  "campaign": "qwen3.8-27b-mxfp4-vllm",
+  "finish_reason": "length",
+  "generation_elapsed_seconds": 1.369,
+  "gpus": [
+    {
+      "capability": [
+        8,
+        6
+      ],
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 3090 Ti"
+    }
+  ],
+  "model": "/home/kearm/models/Qwen3.8-27B-vLLM-MXFP4A16-GPTQ-text-only-source-tokenizer-v4",
+  "non_claims": [
+    "One deterministic generation proves CUDA execution, not accuracy or throughput.",
+    "Parity and performance require a separate matched BF16 control protocol."
+  ],
+  "output": " Paris.\nThe capital of Germany is Berlin.\nThe capital of Italy is",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+  "prompt": "The capital of France is",
+  "python": "3.12.14",
+  "quantization_config": {
+    "config_groups": {
+      "group_0": {
+        "format": "mxfp4-pack-quantized",
+        "input_activations": null,
+        "output_activations": null,
+        "targets": [
+          "Linear"
+        ],
+        "weights": {
+          "actorder": "static",
+          "block_structure": null,
+          "dynamic": false,
+          "group_size": 32,
+          "num_bits": 4,
+          "observer": "memoryless_minmax",
+          "observer_kwargs": {},
+          "scale_dtype": "torch.uint8",
+          "strategy": "group",
+          "symmetric": true,
+          "type": "float",
+          "zp_dtype": null
+        }
+      }
+    },
+    "format": "mxfp4-pack-quantized",
+    "global_compression_ratio": null,
+    "ignore": [
+      "lm_head"
+    ],
+    "kv_cache_scheme": null,
+    "quant_method": "compressed-tensors",
+    "quantization_status": "compressed",
+    "sparsity_config": {},
+    "transform_config": {},
+    "version": "0.19.0"
+  },
+  "receipt_status": "superseded",
+  "recorded_at": "2026-10-19T07:17:44-07:00",
+  "runtime": {
+    "torch": "2.13.0",
+    "transformers": "5.19.0",
+    "vllm": "0.32.0"
+  },
+  "schema": "mlx-gptq-calibration/vllm-mxfp4-validation/1",
+  "settings": {
+    "dtype": "bfloat16",
+    "enforce_eager": true,
+    "gpu_memory_utilization": 0.82,
+    "max_model_len": 512,
+    "max_num_batched_tokens": 512,
+    "max_tokens": 16,
+    "seed": 17
+  },
+  "stop_reason": null,
+  "superseded_by": "vllm-validation-source-tokenizer-v4-hash-bound.json",
+  "token_ids": [
+    11751,
+    13,
+    198,
+    760,
+    6511,
+    314,
+    9564,
+    369,
+    19241,
+    13,
+    198,
+    760,
+    6511,
+    314,
+    14898,
+    369
+  ],
+  "validation_lineage": "initial v4 validation without artifact hash receipt; superseded by hash-bound rerun"
+}

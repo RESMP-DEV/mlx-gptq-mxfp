@@ -1,0 +1,115 @@
+{
+  "artifacts": {
+    "candidate": {
+      "path": "/home/kearm/workloads/gemma4-logit-trace/models/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+      "sha256": "a7c5bc715f5ff8e99a3e8901ce7d2b42b402c669bf24f7c5250747633d0f5891",
+      "size_bytes": 14249047104
+    },
+    "corpus": {
+      "path": "/home/kearm/workloads/gemma4-logit-trace/data/wiki.test.raw",
+      "sha256": "173c87a53759e0201f33e0ccf978e510c2042d7f2cb78229d9a50d79b9e7dd08",
+      "size_bytes": 1290590
+    },
+    "reference": {
+      "path": "/home/kearm/workloads/gemma4-logit-trace/models/gemma-4-26B-A4B-it-qat-BF16.gguf",
+      "sha256": "b98c7f11337ab95f67665af282241d1654e3bbf6573e595a4426941bcebad4f6",
+      "size_bytes": 50505137184
+    },
+    "reference_logits": {
+      "path": "/home/kearm/workloads/gemma4-logit-trace/run/b550-32x512/reference-log-probabilities.bin",
+      "sha256": "df4a4433ebfd854c800de6394d5dc970de7c9b98cdf0819331c8103097deabdf",
+      "size_bytes": 4278320916
+    },
+    "runtime": {
+      "path": "/home/kearm/workloads/gemma4-logit-trace/runtime/llama-perplexity",
+      "sha256": "f3362a140944c6413fdcede7626b3ec6c6e92a217d68d7f803212f9d792985c7",
+      "size_bytes": 14472,
+      "version": "10265 (8ce6f6fb2)"
+    }
+  },
+  "commands": {
+    "candidate": [
+      "/home/kearm/workloads/gemma4-logit-trace/runtime/llama-perplexity",
+      "--model",
+      "/home/kearm/workloads/gemma4-logit-trace/models/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+      "--kl-divergence",
+      "--kl-divergence-base",
+      "/home/kearm/workloads/gemma4-logit-trace/run/b550-32x512/reference-log-probabilities.bin",
+      "--ctx-size",
+      "512",
+      "--batch-size",
+      "512",
+      "--chunks",
+      "32",
+      "--threads",
+      "8",
+      "--n-gpu-layers",
+      "24",
+      "--no-warmup"
+    ],
+    "reference": [
+      "/home/kearm/workloads/gemma4-logit-trace/runtime/llama-perplexity",
+      "--model",
+      "/home/kearm/workloads/gemma4-logit-trace/models/gemma-4-26B-A4B-it-qat-BF16.gguf",
+      "--file",
+      "/home/kearm/workloads/gemma4-logit-trace/data/wiki.test.raw",
+      "--save-all-logits",
+      "/home/kearm/workloads/gemma4-logit-trace/run/b550-32x512/reference-log-probabilities.bin",
+      "--ctx-size",
+      "512",
+      "--batch-size",
+      "512",
+      "--chunks",
+      "32",
+      "--threads",
+      "8",
+      "--n-gpu-layers",
+      "24",
+      "--no-warmup"
+    ]
+  },
+  "elapsed_seconds": {
+    "candidate": 46.02141705699978,
+    "reference": 141.7192555520005
+  },
+  "execution_host": {
+    "hostname": "B550",
+    "ssh_address": "10.243.229.86",
+    "gpus": [
+      "NVIDIA GeForce RTX 3090 Ti",
+      "NVIDIA GeForce RTX 3090 Ti"
+    ]
+  },
+  "logs": {
+    "candidate": "/home/kearm/workloads/gemma4-logit-trace/run/b550-32x512/candidate.log",
+    "reference": "/home/kearm/workloads/gemma4-logit-trace/run/b550-32x512/reference.log"
+  },
+  "method": {
+    "batch_size": 512,
+    "chunks": 32,
+    "comparison": "full-vocabulary KL over the evaluated half of each context",
+    "ctx_size": 512,
+    "evaluated_tokens": 8160,
+    "gpu_layers": 24,
+    "reference_storage": "llama.cpp uint16 log-probability trace",
+    "reference_storage_caveat": "the trace clips base log probabilities below the llama.cpp -16 floor; reference perplexity and its ratio are therefore recomputed from the unclipped reference pass",
+    "runtime": "llama.cpp llama-perplexity",
+    "threads": 8
+  },
+  "recorded_at": "2026-08-23T03:02:30.378231+00:00",
+  "schema_version": 1,
+  "statistics": {
+    "candidate_perplexity": 573.223342,
+    "maximum_kl_divergence": 5.760474,
+    "mean_kl_divergence": 0.109056,
+    "median_kl_divergence": 0.032823,
+    "p99_9_kl_divergence": 2.854649,
+    "p99_kl_divergence": 1.240669,
+    "perplexity_ratio": 1.0055902400669992,
+    "reference_perplexity": 570.0367,
+    "rms_token_probability_delta_percent": 5.097,
+    "top1_agreement_percent": 85.123,
+    "trace_perplexity_ratio_clipped": 1.127069,
+    "trace_reference_perplexity_clipped": 508.596709
+  }
+}

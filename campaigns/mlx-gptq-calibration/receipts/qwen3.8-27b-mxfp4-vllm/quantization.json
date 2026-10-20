@@ -1,0 +1,81 @@
+{
+  "calibration": {
+    "id": "RESMP-DEV/ptq-calibration-corpus",
+    "path": "/home/kearm/datasets/ptq-calibration-corpus-ffa2e74/data/calibration_256x2048.npy",
+    "revision": "ffa2e74b9361d573167373140f10dfd30c69a327",
+    "sha256": "d7dd281b1f1756a6492361e1dfb0c65fed259f8a3d65eabbcb51809b50bd35d7",
+    "shape": [
+      256,
+      2048
+    ]
+  },
+  "campaign": "qwen3.8-27b-mxfp4-vllm",
+  "elapsed_seconds": 3606.239,
+  "gpus": [
+    {
+      "capability": [
+        8,
+        6
+      ],
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 3090 Ti",
+      "total_bytes": 25285623808
+    }
+  ],
+  "model_class": "Qwen3_5ForCausalLM",
+  "non_claims": [
+    "This receipt proves tool execution and packed output creation, not model accuracy.",
+    "A separate live vLLM generation and parity/performance run is required before serving."
+  ],
+  "output": {
+    "files": {
+      "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+      "config.json": "056ce3885a90756e616052b39c51728c59ba5b8cb8fcf6472892f736932b452b",
+      "generation_config.json": "df6f86c3fdce573ecdb55cec35f502ddda70e70abe78288a78164aef120232e7",
+      "model.safetensors": "fc5459be218d68b1f2ed59437462ff4aecab40ef74fa81bf46d2cb0a14527e11",
+      "model.safetensors.index.json": "abd77363920ab2f1701a48a4e860c28270a87120512a8f0c628889d1b16852ff",
+      "model_mtp.safetensors": "1d8268aa85ace093a561e3e7b63b9d390dac1cd55a90cd55b5ec509c3c9da9fe",
+      "recipe.yaml": "6a0a36332e217bc466ea87625a40e1bfc5814963485198c8db905cdc83061d93",
+      "tokenizer.json": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+      "tokenizer_config.json": "bee8eba30f0eb4af73c0fe2cd06d0f89b657d7819941c438157ec42f7c80ea87"
+    },
+    "path": "/home/kearm/models/Qwen3.8-27B-compressed-tensors-MXFP4A16-GPTQ"
+  },
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+  "post_run_runtime_verification": {
+    "llmcompressor_record_sha256": "77d00e684fa163de37f78d37f08be491378d8271e98c4f73367d0c449ec70b8c",
+    "measured_at": "2026-10-19T06:02:00-07:00",
+    "note": "added after the live B550 environment measurement; the original run predated this contract field"
+  },
+  "python": "3.12.14",
+  "recipe": {
+    "actorder": "static",
+    "dampening_frac": 0.01,
+    "format": "compressed-tensors",
+    "group_size": 32,
+    "pipeline": "sequential",
+    "scheme": "MXFP4A16"
+  },
+  "recorded_at": "2026-10-19T05:30:31-0700",
+  "runtime": {
+    "causal_conv1d": "1.7.0",
+    "compressed_tensors": "0.19.0",
+    "flash_linear_attention": "0.5.2",
+    "llmcompressor": "0.14.0",
+    "torch": "2.14.0",
+    "transformers": "5.17.0"
+  },
+  "schema": "mlx-gptq-calibration/cuda-mxfp4-vllm/1",
+  "source_model": {
+    "id": "Qwen/Qwen3.8-27B",
+    "path": "/home/kearm/training/models/Qwen3.8-27B-1d4bf0f",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "verification": {
+      "failures": [],
+      "repo": "Qwen/Qwen3.8-27B",
+      "requested_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "resolved_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "status": "verified"
+    }
+  }
+}

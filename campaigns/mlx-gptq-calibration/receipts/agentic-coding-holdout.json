@@ -1,0 +1,288 @@
+{
+  "artifacts": {
+    "combined_text": {
+      "bytes": 6504524,
+      "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/agentic-coding-long-context.txt",
+      "sha256": "e615a4149b1b16e5327d8cf79cbb70b07a4007c29cc2302ffc13291cc36455cd"
+    },
+    "file_manifest": {
+      "bytes": 1705878,
+      "contains_source_text": true,
+      "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/agentic-coding-files.parquet",
+      "sha256": "f096345435d154a9c57a74d1f94e3f742ffabb293f0e4fcb469ae9daff86609a"
+    }
+  },
+  "calibration_exclusion": {
+    "combined_stream_shared_twenty_word_shingles": 0,
+    "combined_stream_twenty_word_shingles": 773048,
+    "maximum_shared_shingles_per_selected_file": 0,
+    "path": "/home/kearm/workloads/gemma4-logit-trace/data/ultra-fineweb-holdout/calibration.txt",
+    "sha256": "244a35f5289efad6397342a6782350e464a5f180d8406d2969200722d7da5fb9",
+    "twenty_word_shingles": 222990
+  },
+  "construction": {
+    "category_character_targets": {
+      "docs": 0.2,
+      "source": 0.55,
+      "tests": 0.25
+    },
+    "maximum_file_bytes": 262144,
+    "minimum_chars_per_repository": 350000,
+    "minimum_combined_chars": 5000000,
+    "representation": "selected file tree followed by complete public file contents",
+    "seed": "agentic-coding-long-context-v1",
+    "target_chars_per_repository": 1250000,
+    "task_prompts_included": false,
+    "trajectories_included": false,
+    "verifier_material_included": false
+  },
+  "purpose": "evaluation-only agentic-coding long-context holdout; never calibration input",
+  "repositories": [
+    {
+      "artifact": {
+        "bytes": 970146,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/repositories/diffrax.txt",
+        "sha256": "10ba4a0a497bf7c5bd8177e86fb7379885bcb274438d41acfd6d4a1475376df3"
+      },
+      "candidate_files": 131,
+      "commit": "56d78e1acbdc9c1493caef17a34777931430f3bf",
+      "license_artifact": {
+        "bytes": 11357,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/licenses/diffrax-LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "source_path": "LICENSE"
+      },
+      "license_spdx": "Apache-2.0",
+      "rejected": {
+        "binary_or_encoding": 0,
+        "calibration_overlap": 1,
+        "generated": 1,
+        "path": 31,
+        "size": 7
+      },
+      "selected_by_category": {
+        "docs": 33,
+        "source": 74,
+        "tests": 24
+      },
+      "selected_characters_by_category": {
+        "docs": 81687,
+        "source": 636282,
+        "tests": 228824
+      },
+      "selected_content_chars": 946793,
+      "selected_files": 131,
+      "slug": "diffrax",
+      "source_index_task_id": "034",
+      "tree": "d652cf0b226da1b07c46c58fadd5a81e600edfb3",
+      "url": "https://github.com/patrick-kidger/diffrax"
+    },
+    {
+      "artifact": {
+        "bytes": 1320752,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/repositories/xarray.txt",
+        "sha256": "12ab42ac65bc08b6fc711c179b467e7a80d5f6a0f97fe127bef00cba92b0dfea"
+      },
+      "candidate_files": 286,
+      "commit": "0b071e369a88f6672accc2a99c40d3b4b334f2f9",
+      "license_artifact": {
+        "bytes": 10273,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/licenses/xarray-LICENSE",
+        "sha256": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68",
+        "source_path": "LICENSE"
+      },
+      "license_spdx": "Apache-2.0",
+      "rejected": {
+        "binary_or_encoding": 0,
+        "calibration_overlap": 13,
+        "generated": 3,
+        "path": 64,
+        "size": 25
+      },
+      "selected_by_category": {
+        "docs": 26,
+        "source": 63,
+        "tests": 8
+      },
+      "selected_characters_by_category": {
+        "docs": 263083,
+        "source": 706102,
+        "tests": 334286
+      },
+      "selected_content_chars": 1303471,
+      "selected_files": 97,
+      "slug": "xarray",
+      "source_index_task_id": "088",
+      "tree": "6c82a73d9d59ec45ba46a57f8418b9c82b568a97",
+      "url": "https://github.com/pydata/xarray"
+    },
+    {
+      "artifact": {
+        "bytes": 1151383,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/repositories/cvxpy.txt",
+        "sha256": "c17d37d162dbab6f331a79104ba94417e9e08ba16c205932df7d1ecd1ca304ed"
+      },
+      "candidate_files": 156,
+      "commit": "5f57b6408864caab207c28f773a14c6261689abe",
+      "license_artifact": {
+        "bytes": 11344,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/licenses/cvxpy-LICENSE",
+        "sha256": "94d81cb282da837f4ace0df08b52fd1c72e07da9efb52e5aa6d556a5cea5286f",
+        "source_path": "LICENSE"
+      },
+      "license_spdx": "Apache-2.0",
+      "rejected": {
+        "binary_or_encoding": 0,
+        "calibration_overlap": 393,
+        "generated": 4,
+        "path": 483,
+        "size": 25
+      },
+      "selected_by_category": {
+        "docs": 87,
+        "source": 51,
+        "tests": 18
+      },
+      "selected_characters_by_category": {
+        "docs": 636285,
+        "source": 173791,
+        "tests": 309997
+      },
+      "selected_content_chars": 1120073,
+      "selected_files": 156,
+      "slug": "cvxpy",
+      "source_index_task_id": "076",
+      "tree": "5da0d38507262e0db8b956b9df31db45f7928e89",
+      "url": "https://github.com/cvxpy/cvxpy"
+    },
+    {
+      "artifact": {
+        "bytes": 472953,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/repositories/monai.txt",
+        "sha256": "32f08f1d6bd0214046781ecf237d943e916f71f119d28683460356c5eadc627b"
+      },
+      "candidate_files": 80,
+      "commit": "18daff1d8b26002b02de526cc19b92a9a4907f89",
+      "license_artifact": {
+        "bytes": 11357,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/licenses/monai-LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "source_path": "LICENSE"
+      },
+      "license_spdx": "Apache-2.0",
+      "rejected": {
+        "binary_or_encoding": 0,
+        "calibration_overlap": 1127,
+        "generated": 2,
+        "path": 89,
+        "size": 5
+      },
+      "selected_by_category": {
+        "docs": 45,
+        "source": 22,
+        "tests": 13
+      },
+      "selected_characters_by_category": {
+        "docs": 277738,
+        "source": 148604,
+        "tests": 32547
+      },
+      "selected_content_chars": 458889,
+      "selected_files": 80,
+      "slug": "monai",
+      "source_index_task_id": "053",
+      "tree": "7ef508434169a0fdafde543709ffcef9b6808c13",
+      "url": "https://github.com/Project-MONAI/MONAI"
+    },
+    {
+      "artifact": {
+        "bytes": 1292274,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/repositories/pyscf.txt",
+        "sha256": "692b2c1e1969274d7d7ec56faaeb0e687bc8de68e4e20fd7d198c7d711312215"
+      },
+      "candidate_files": 569,
+      "commit": "802cd37e9dc6abb52f30d84bb422b6ee15493fc9",
+      "license_artifact": {
+        "bytes": 11357,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/licenses/pyscf-LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "source_path": "LICENSE"
+      },
+      "license_spdx": "Apache-2.0",
+      "rejected": {
+        "binary_or_encoding": 0,
+        "calibration_overlap": 1077,
+        "generated": 4,
+        "path": 396,
+        "size": 51
+      },
+      "selected_by_category": {
+        "docs": 167,
+        "source": 28,
+        "tests": 30
+      },
+      "selected_characters_by_category": {
+        "docs": 341122,
+        "source": 699637,
+        "tests": 210044
+      },
+      "selected_content_chars": 1250803,
+      "selected_files": 225,
+      "slug": "pyscf",
+      "source_index_task_id": "033",
+      "tree": "ec5d19b29dc142cadf6dc17b0e811e561c0c9a05",
+      "url": "https://github.com/pyscf/pyscf"
+    },
+    {
+      "artifact": {
+        "bytes": 1297011,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/repositories/quimb.txt",
+        "sha256": "b5f1a101e8000ea7a7654cbe64185284eae34eba67800fad96613f7f6127fc15"
+      },
+      "candidate_files": 187,
+      "commit": "79594e405ac72da908cdd7a1058911afc256c483",
+      "license_artifact": {
+        "bytes": 558,
+        "path": "/home/kearm/workloads/gemma4-logit-trace/data/agentic-holdout/output/licenses/quimb-LICENSE.txt",
+        "sha256": "e708fa9633397b771e5a7c14fc471e3b2185499e1820fe4b3c7837918918e621",
+        "source_path": "LICENSE.txt"
+      },
+      "license_spdx": "Apache-2.0",
+      "rejected": {
+        "binary_or_encoding": 0,
+        "calibration_overlap": 1,
+        "generated": 0,
+        "path": 71,
+        "size": 25
+      },
+      "selected_by_category": {
+        "docs": 21,
+        "source": 49,
+        "tests": 29
+      },
+      "selected_characters_by_category": {
+        "docs": 129640,
+        "source": 826979,
+        "tests": 320635
+      },
+      "selected_content_chars": 1277254,
+      "selected_files": 99,
+      "slug": "quimb",
+      "source_index_task_id": "050",
+      "tree": "d536c822d6772ac850217d3aa647b49032d2acd6",
+      "url": "https://github.com/jcmgray/quimb"
+    }
+  ],
+  "schema_version": 1,
+  "source_index": {
+    "path": "data/tasks.csv",
+    "repository": "OpenMOSS-Team/SWE-bench-Science",
+    "revision": "7e7084280fdf5d21811ff04c7acb0b738984c705",
+    "role": "repository, commit, and source-license selection only"
+  },
+  "tokenization": {
+    "tokenizer": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+    "tokenizer_revision": "f1e06dc520982d9b9edd76859fdb7ab209449949",
+    "tokens_without_bos": 2429702
+  }
+}

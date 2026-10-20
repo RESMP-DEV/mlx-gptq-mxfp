@@ -1,0 +1,132 @@
+diff --git a/tools/perplexity/perplexity.cpp b/tools/perplexity/perplexity.cpp
+index b772aa0..8c63af0 100644
+--- a/tools/perplexity/perplexity.cpp
++++ b/tools/perplexity/perplexity.cpp
+@@ -8,6 +8,7 @@
+ #include <chrono>
+ #include <clocale>
+ #include <cmath>
++#include <cstdlib>
+ #include <cstdio>
+ #include <cstring>
+ #include <ctime>
+@@ -27,6 +28,23 @@ struct results_log_softmax {
+     float  prob;
+ };
+ 
++static int perplexity_first_scored_token(int n_ctx) {
++    const char * value = std::getenv("LLAMA_PPL_EVAL_TOKENS");
++    if (value == nullptr || value[0] == '\0') {
++        return n_ctx/2;
++    }
++
++    char * end = nullptr;
++    const long requested = std::strtol(value, &end, 10);
++    if (end == value || *end != '\0' || requested <= 0) {
++        LOG_ERR("invalid LLAMA_PPL_EVAL_TOKENS=%s; expected a positive integer\n", value);
++        return n_ctx/2;
++    }
++
++    const int evaluated = std::min<int>(requested, n_ctx - 1);
++    return n_ctx - 1 - evaluated;
++}
++
+ static std::vector<float> softmax(const std::vector<float>& logits) {
+     std::vector<float> probs(logits.size());
+     float max_logit = logits[0];
+@@ -311,8 +329,8 @@ static results_perplexity perplexity_v2(llama_context * ctx, const common_params
+ 
+     const int n_ctx = llama_n_ctx(ctx);
+ 
+-    if (int(tokens.size()) < 2*n_ctx) {
+-        LOG_ERR("%s: you need at least %d tokens to evaluate perplexity with a context of %d\n",__func__,2*n_ctx,
++    if (int(tokens.size()) < n_ctx) {
++        LOG_ERR("%s: you need at least %d tokens to evaluate perplexity with a context of %d\n",__func__,n_ctx,
+                 n_ctx);
+         LOG_ERR("%s: the data file you provided tokenizes to only %zu tokens\n",__func__,tokens.size());
+         return {std::move(tokens), 0., {}, {}};
+@@ -477,8 +495,8 @@ static results_perplexity perplexity(llama_context * ctx, const common_params & p
+     auto tim2 = std::chrono::high_resolution_clock::now();
+     LOG_INF("%s: tokenization took %g ms\n",__func__,1e-3*std::chrono::duration_cast<std::chrono::microseconds>(tim2-tim1).count());
+ 
+-    if (int(tokens.size()) < 2*n_ctx) {
+-        LOG_ERR("%s: you need at least %d tokens to evaluate perplexity with a context of %d\n",__func__,2*n_ctx,
++    if (int(tokens.size()) < n_ctx) {
++        LOG_ERR("%s: you need at least %d tokens to evaluate perplexity with a context of %d\n",__func__,n_ctx,
+                 n_ctx);
+         LOG_ERR("%s: the data file you provided tokenizes to only %zu tokens\n",__func__,tokens.size());
+         return {std::move(tokens), 0., {}, {}};
+@@ -497,6 +515,9 @@ static results_perplexity perplexity(llama_context * ctx, const common_params & p
+ 
+     const int n_vocab = llama_vocab_n_tokens(vocab);
+ 
++    const int first = perplexity_first_scored_token(n_ctx);
++    const int n_eval = n_ctx - 1 - first;
++
+     int count = 0;
+     double nll = 0.0;
+     double nll2 = 0.0;
+@@ -512,10 +533,11 @@ static results_perplexity perplexity(llama_context * ctx, const common_params & p
+ 
+     std::vector<float> logits;
+     if (num_batches > 1) {
+-        logits.reserve(size_t(n_ctx) * n_vocab);
++        logits.reserve(size_t(n_eval) * n_vocab);
+     }
+ 
+     LOG_INF("%s: calculating perplexity over %d chunks, n_ctx=%d, batch_size=%d, n_seq=%d\n", __func__, n_chunk, n_ctx, n_batch, n_seq);
++    LOG_INF("%s: evaluating %d tail predictions after a %d-token prefix\n", __func__, n_eval, first);
+ 
+     std::vector<std::thread> workers(std::thread::hardware_concurrency() - 1);
+ 
+@@ -526,7 +549,7 @@ static results_perplexity perplexity(llama_context * ctx, const common_params & p
+         logits_stream.write((const char *)&n_chunk, sizeof(n_chunk));
+         logits_stream.write((const char *)tokens.data(), n_chunk*n_ctx*sizeof(tokens[0]));
+         const int nv = 2*((n_vocab + 1)/2) + 4;
+-        log_probs.resize(size_t(n_ctx) * nv);
++        log_probs.resize(size_t(n_eval) * nv);
+     }
+ 
+     // We get the logits for all the tokens in the context window (params.n_ctx)
+@@ -539,7 +562,5 @@ static results_perplexity perplexity(llama_context * ctx, const common_params & p
+     // last 256 tokens.  Then, we split the input up into context window size chunks to
+     // process the entire prompt.
+-    const int first = n_ctx/2;
+-
+     for (int i = 0; i < n_chunk; i += n_seq) {
+         const int start =     i * n_ctx;
+         const int end   = start + n_ctx;
+@@ -1750,16 +1771,20 @@ static void kl_divergence(llama_context * ctx, const common_params & params) {
+     const bool add_bos = llama_vocab_get_add_bos(vocab);
+     GGML_ASSERT(!llama_vocab_get_add_eos(vocab));
+ 
++    const int first = perplexity_first_scored_token(n_ctx);
++    const int n_eval = n_ctx - 1 - first;
++
+     llama_batch batch = llama_batch_init(std::min(n_batch, static_cast<int>(n_ctx)*n_seq), 0, 1);
+ 
+-    std::vector<uint16_t> log_probs_uint16(size_t(n_ctx - 1 - n_ctx/2) * nv);
+-    std::vector<float>    kld_values(size_t(n_ctx - 1 - n_ctx/2)*n_chunk);
+-    std::vector<float> p_diff_values(size_t(n_ctx - 1 - n_ctx/2)*n_chunk);
++    std::vector<uint16_t> log_probs_uint16(size_t(n_eval) * nv);
++    std::vector<float>    kld_values(size_t(n_eval)*n_chunk);
++    std::vector<float> p_diff_values(size_t(n_eval)*n_chunk);
+     std::vector<float> logits;
+     if (num_batches > 1) {
+-        logits.reserve(size_t(n_ctx) * n_vocab);
++        logits.reserve(size_t(n_eval) * n_vocab);
+     }
+ 
+     LOG_INF("%s: computing over %d chunks, n_ctx=%u, batch_size=%d, n_seq=%d\n", __func__, n_chunk, n_ctx, n_batch, n_seq);
++    LOG_INF("%s: evaluating %d tail predictions after a %d-token prefix\n", __func__, n_eval, first);
+ 
+     std::vector<std::thread> workers(std::thread::hardware_concurrency() - 1);
+@@ -1789,8 +1813,6 @@ static void kl_divergence(llama_context * ctx, const common_params & params) {
+     auto    kld_ptr =    kld_values.data();
+     auto p_diff_ptr = p_diff_values.data();
+ 
+-    const int first = n_ctx/2;
+-
+     for (int i = 0; i < n_chunk; i += n_seq) {
+         const int start =     i * n_ctx;
+         const int end   = start + n_ctx;

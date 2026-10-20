@@ -1,0 +1,119 @@
+{
+  "arms": {
+    "bf16": {
+      "mean_nll": 0.8997617976830846,
+      "perplexity": 2.4590172977710028,
+      "perplexity_receipt": "perplexity-bf16.json",
+      "quantization_format": null,
+      "role": "matched reference",
+      "shard_count": 12,
+      "throughput_receipt": "throughput-bf16.json",
+      "tokens_per_second": 28.78
+    },
+    "mxfp4_gptq": {
+      "mean_nll": 0.9159956826616841,
+      "packaging_receipt": "mxfp4-a100-text-only-packaging.json",
+      "perplexity": 2.4992624857756685,
+      "perplexity_receipt": "perplexity-mxfp4-gptq.json",
+      "quantization_format": "mxfp4-pack-quantized",
+      "quantization_receipt": "mxfp4-a100-quantization.json",
+      "role": "recommended candidate",
+      "shard_count": 1,
+      "throughput_receipt": "throughput-mxfp4-gptq.json",
+      "tokens_per_second": 61.51
+    }
+  },
+  "calibration": {
+    "dataset": "RESMP-DEV/ptq-calibration-corpus",
+    "matrix": "data/calibration_256x2048.npy",
+    "revision": "ffa2e74b9361d573167373140f10dfd30c69a327",
+    "sample_order": "original",
+    "sha256": "d7dd281b1f1756a6492361e1dfb0c65fed259f8a3d65eabbcb51809b50bd35d7",
+    "shape": [
+      256,
+      2048
+    ]
+  },
+  "comparison": {
+    "mean_nll_delta": 0.016233884978599455,
+    "perplexity_ratio": 1.0163663704363308,
+    "relative_perplexity_increase_percent": 1.6366370436330824,
+    "throughput_ratio": 2.13724808895066,
+    "throughput_speedup_percent": 113.72480889506602
+  },
+  "holdout": {
+    "bytes": 6504524,
+    "calibration_text_sha256": "244a35f5289efad6397342a6782350e464a5f180d8406d2969200722d7da5fb9",
+    "dataset": "RESMP-DEV/ptq-calibration-corpus",
+    "path": "data/heldout/agentic-coding/agentic-coding-long-context.txt",
+    "revision": "6ef2bbf949b94192ee8bb78d45a2fc840a10cff5",
+    "sha256": "e615a4149b1b16e5327d8cf79cbb70b07a4007c29cc2302ffc13291cc36455cd",
+    "shared_twenty_word_shingles_with_calibration": 0
+  },
+  "method": {
+    "compute_capability": "8.0",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "perplexity": {
+      "coverage_identical": true,
+      "evaluated_tokens": 34303,
+      "holdout_identical": true,
+      "scoring": "explicit causal-logit cross entropy on the final scored positions",
+      "seq_len": 2048,
+      "stride": 512,
+      "windows": 64
+    },
+    "runtime": {
+      "torch": "2.13.0+cu130",
+      "transformers": "5.19.0",
+      "vllm": "0.32.0"
+    },
+    "throughput": {
+      "dtype": "bfloat16",
+      "enforce_eager": false,
+      "gpu_memory_utilization": 0.85,
+      "max_model_len": 4096,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 128,
+      "max_tokens": 128,
+      "prompt": "Explain how a transformer attention head works.",
+      "same_gpu_name": true,
+      "seed": 17,
+      "warmup_pass": true
+    }
+  },
+  "non_claims": [
+    "Held-out code perplexity is not a task, instruction-following, or agentic score.",
+    "Single-request decode throughput is not batched serving capacity.",
+    "This result is for one A100-SXM4-80GB and vLLM 0.32.0; it does not qualify B550, PCIe A100s, or other serving engines.",
+    "The MXFP4 arm uses Marlin weight-only W4A16 on Ampere, not native W4A4 tensor-core execution.",
+    "The A100 artifact hash differs from the earlier B550 artifact because GPTQ is not bitwise reproducible across devices; each artifact must be referenced by its own receipt.",
+    "No task-accuracy threshold or acceptance interval was predefined; the recommendation is a measured quality-speed tradeoff, not a universal leaderboard claim."
+  ],
+  "question": "Which Qwen3.8-27B precision should this fleet serve on Ampere A100?",
+  "recommendation": {
+    "artifact": {
+      "config_sha256": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+      "huggingface_repository": "RESMP-DEV/Qwen3.8-27B-MXFP4A16-GPTQ-A100",
+      "huggingface_revision": "95709c64d92b8bc9747388638d6da00db4c0adff",
+      "huggingface_tag": "a100-vllm-0.32.0-v3",
+      "model_safetensors_sha256": "1b6cf393189f59763dbd330cf85fefd2508cfca63db7c13aaea8d53da71e1dd7",
+      "path_on_modal_volume": "/root/model-data/artifacts/Qwen3.8-27B-MXFP4A16-GPTQ-text-only",
+      "publication_receipt": "hf-publication.json",
+      "quantization_gpu": "NVIDIA A100-SXM4-40GB",
+      "raw_model_safetensors_sha256": "7efcd51f35ba23a60bc0ac950a40d52f94014c6636595f3e39f045ac5324a5d7"
+    },
+    "precision": "MXFP4A16 GPTQ",
+    "reason": "The matched causal holdout perplexity penalty is 1.64% while single-request decode throughput is 2.14x BF16.",
+    "strength": "recommended for single-request A100 inference"
+  },
+  "recorded_at": "2026-10-20T02:47:05+00:00",
+  "schema": "mlx-gptq-calibration/qwen38-precision-ladder-result/1",
+  "source": {
+    "file_count": 32,
+    "pipeline_content_manifest_sha256": "968425eaa11944b2b8d285acb995c034c52ccdc057a661991abfb955aa377182",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "total_bytes": 55586114863,
+    "verification_receipt": "source-verification.json"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "calibration": {
+    "id": "RESMP-DEV/ptq-calibration-corpus",
+    "path": "/root/model-data/calibration/data/calibration_256x2048.npy",
+    "revision": "ffa2e74b9361d573167373140f10dfd30c69a327",
+    "sha256": "d7dd281b1f1756a6492361e1dfb0c65fed259f8a3d65eabbcb51809b50bd35d7",
+    "shape": [
+      256,
+      2048
+    ]
+  },
+  "campaign": "qwen3.8-27b-mxfp4-vllm-a100",
+  "elapsed_seconds": 2439.068,
+  "gpus": [
+    {
+      "capability": [
+        8,
+        0
+      ],
+      "index": 0,
+      "name": "NVIDIA A100-SXM4-40GB",
+      "total_bytes": 42429251584
+    }
+  ],
+  "model_class": "Qwen3_5ForCausalLM",
+  "non_claims": [
+    "This receipt proves tool execution and packed output creation, not model accuracy.",
+    "A separate live vLLM generation and parity/performance run is required before serving."
+  ],
+  "output": {
+    "files": {
+      "config.json": "056ce3885a90756e616052b39c51728c59ba5b8cb8fcf6472892f736932b452b",
+      "generation_config.json": "df6f86c3fdce573ecdb55cec35f502ddda70e70abe78288a78164aef120232e7",
+      "model.safetensors": "7efcd51f35ba23a60bc0ac950a40d52f94014c6636595f3e39f045ac5324a5d7",
+      "model.safetensors.index.json": "abd77363920ab2f1701a48a4e860c28270a87120512a8f0c628889d1b16852ff",
+      "model_mtp.safetensors": "1d8268aa85ace093a561e3e7b63b9d390dac1cd55a90cd55b5ec509c3c9da9fe",
+      "recipe.yaml": "6a0a36332e217bc466ea87625a40e1bfc5814963485198c8db905cdc83061d93"
+    },
+    "path": "/root/model-data/artifacts/Qwen3.8-27B-MXFP4A16-GPTQ-raw"
+  },
+  "platform": "Linux-4.19.0-gvisor-x86_64-with-glibc2.39",
+  "python": "3.12.1",
+  "recipe": {
+    "actorder": "static",
+    "dampening_frac": 0.01,
+    "format": "compressed-tensors",
+    "group_size": 32,
+    "pipeline": "sequential",
+    "scheme": "MXFP4A16"
+  },
+  "recorded_at": "2026-10-20T00:37:14+00:00",
+  "runtime": {
+    "causal_conv1d": "1.7.0",
+    "compressed_tensors": "0.19.0",
+    "flash_linear_attention": "0.5.2",
+    "llmcompressor": "0.14.0",
+    "llmcompressor_record_sha256": "ae6b86e746c1173d72de4ed77e1c90088d120c812a254304614ee007ca2069d5",
+    "torch": "2.14.0+cu130",
+    "transformers": "5.17.0"
+  },
+  "schema": "mlx-gptq-calibration/cuda-mxfp4-vllm/1",
+  "source_model": {
+    "id": "Qwen/Qwen3.8-27B",
+    "path": "/root/model-data/Qwen3.8-27B-bf16",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "verification": {
+      "failures": [],
+      "output": "/root/model-data/Qwen3.8-27B-bf16",
+      "pipeline_content_manifest_sha256": "968425eaa11944b2b8d285acb995c034c52ccdc057a661991abfb955aa377182",
+      "repo": "Qwen/Qwen3.8-27B",
+      "requested_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "resolved_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "status": "verified"
+    }
+  }
+}

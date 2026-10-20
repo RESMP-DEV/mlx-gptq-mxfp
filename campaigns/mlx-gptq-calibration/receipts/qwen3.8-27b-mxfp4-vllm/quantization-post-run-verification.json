@@ -1,0 +1,12 @@
+{
+  "llmcompressor_record_sha256": "77d00e684fa163de37f78d37f08be491378d8271e98c4f73367d0c449ec70b8c",
+  "non_claims": [
+    "This post-run receipt does not alter packed weights or claim a rerun of the one-hour GPTQ solve."
+  ],
+  "pipeline_content_manifest_sha256": "968425eaa11944b2b8d285acb995c034c52ccdc057a661991abfb955aa377182",
+  "provenance": "curated post-run bindings measured from the unchanged live B550 environment; the historical quantization receipt is retained verbatim and was not regenerated",
+  "quantization_receipt": "quantization.json",
+  "recorded_at": "2026-10-19T07:30:48-07:00",
+  "schema": "mlx-gptq-calibration/post-run-source-verification/1",
+  "source_output": "/home/kearm/training/models/Qwen3.8-27B-1d4bf0f"
+}

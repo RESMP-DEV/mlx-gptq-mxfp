@@ -1,0 +1,68 @@
+{
+  "gpus": [
+    {
+      "capability": [
+        8,
+        0
+      ],
+      "index": 0,
+      "name": "NVIDIA A100-SXM4-80GB",
+      "total_bytes": 85118156800
+    }
+  ],
+  "holdout": {
+    "bytes": 6504524,
+    "path": "/root/model-data/holdout/data/heldout/agentic-coding/agentic-coding-long-context.txt",
+    "sha256": "e615a4149b1b16e5327d8cf79cbb70b07a4007c29cc2302ffc13291cc36455cd"
+  },
+  "identity": {
+    "architectures": [
+      "Qwen3_5ForCausalLM"
+    ],
+    "config_sha256": "ce3355b5de149b75fbd497d26acc56e66959d08da7e1db509cf058ad6d334311",
+    "model_type": "qwen3_5_text",
+    "quantization_config_present": false,
+    "quantization_format": null,
+    "shard_count": 12,
+    "shard_sha256": {
+      "model-00001-of-00012.safetensors": "54d83c1d36631de231876217a8e0c2483eccee8746369a482b79442bdfc5d958",
+      "model-00002-of-00012.safetensors": "87dafceb9918be621887cbe83e7bc4889c0e6fff5a8961567bdfc33014e6a770",
+      "model-00003-of-00012.safetensors": "691f99ecbe4df5adbaebc0b3c9437cfbb3d0a78c149c019df88ebedc3bf877b8",
+      "model-00004-of-00012.safetensors": "15fe184643fec5136c400e4c70afc761d13e3c134f165e7abdaf72554f53eec0",
+      "model-00005-of-00012.safetensors": "b9a56ae03b6eeee1f9e974c1549a8f96a66fde487217e118d088700240331a23",
+      "model-00006-of-00012.safetensors": "36c0c6333b9b93c68e0e4d8b3d2d6518fb79e2d90d3a6f3e4fd42a1d5c15675c",
+      "model-00007-of-00012.safetensors": "0d6b73c675f1255785000a5a114e6b5f41dfda020b679da1e9e8b6c05a84f349",
+      "model-00008-of-00012.safetensors": "07ba3e41cb1288d5e0c10de8f7ccc4e1de55f839bc50a57a56cfa087fde7f5a6",
+      "model-00009-of-00012.safetensors": "b7b77d1e82aa07b84ad32d3d34f8ab2aebc678acc59bb1509e7d5177fa50d91e",
+      "model-00010-of-00012.safetensors": "b0cb57a8ee3bca5a058c57eb41a343d53ddaa9df7cf000bef0817550c6f92acc",
+      "model-00011-of-00012.safetensors": "740f3f1878e139e3d8a4d997c708a51cabb482dbe349c328b9b759c3aa4f3d86",
+      "model-00012-of-00012.safetensors": "6a7bc2bc63805cd1ab9bbb72f3da46058bf614511ca07d591beea742f57b43ab"
+    }
+  },
+  "label": "bf16",
+  "mode": "perplexity",
+  "model": "/root/model-data/artifacts/Qwen3.8-27B-BF16-text-only",
+  "non_claims": [
+    "Perplexity is held-out text NLL on the agentic-coding corpus; it is not a task or agentic score.",
+    "Throughput is single-request decode under vLLM; it is not batched serving capacity.",
+    "One variant, one GPU, one run; no cross-host or cross-protocol pooling."
+  ],
+  "perplexity": {
+    "evaluated_tokens": 34303,
+    "mean_nll": 0.8997617976830846,
+    "model_load_seconds": 19.85,
+    "perplexity": 2.4590172977710028,
+    "seq_len": 2048,
+    "stride": 512,
+    "windows": 64
+  },
+  "platform": "Linux-4.19.0-gvisor-x86_64-with-glibc2.39",
+  "python": "3.12.1",
+  "recorded_at": "2026-10-20T02:44:01+00:00",
+  "runtime": {
+    "torch": "2.13.0+cu130",
+    "transformers": "5.19.0",
+    "vllm": "0.32.0"
+  },
+  "schema": "mlx-gptq-calibration/variant-bench/1"
+}

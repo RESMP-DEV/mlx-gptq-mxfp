@@ -1,0 +1,14 @@
+.sindexer/
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.cache/
+runs/
+build/
+dist/
+bench-bf16-perplexity.json
+bench-mxfp4-gptq-perplexity.json

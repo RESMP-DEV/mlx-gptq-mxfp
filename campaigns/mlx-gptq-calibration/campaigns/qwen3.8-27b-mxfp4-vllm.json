@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "name": "qwen3.8-27b-mxfp4-vllm",
+  "model": {
+    "id": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_type": "qwen3_5",
+    "weight_bytes": 55562855904,
+    "pipeline_content_manifest_sha256": "968425eaa11944b2b8d285acb995c034c52ccdc057a661991abfb955aa377182",
+    "layers_attr": "model.layers",
+    "checkpoint_model_prefix": "model.language_model",
+    "artifact_layers_prefix": "model.layers",
+    "checkpoint_text_prefix": "model.language_model",
+    "artifact_text_prefix": "model."
+  },
+  "dataset": {
+    "id": "RESMP-DEV/ptq-calibration-corpus",
+    "revision": "ffa2e74b9361d573167373140f10dfd30c69a327",
+    "filename": "data/calibration_256x2048.npy",
+    "sha256": "d7dd281b1f1756a6492361e1dfb0c65fed259f8a3d65eabbcb51809b50bd35d7",
+    "tokenizer": "Qwen/Qwen3.8-27B",
+    "tokenizer_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "engine": {
+    "repository": "https://github.com/vllm-project/llm-compressor.git",
+    "commit": "6e4b96e467c243cb988e87c0fe97b4d51359f983",
+    "commit_scope": "recipe_reference_not_installed_build_provenance",
+    "python": "3.12"
+  },
+  "calibration": {
+    "mode": "mxfp4",
+    "mxfp_algorithm": "gptq",
+    "bits": 4,
+    "group_size": 32,
+    "nsamples": 256,
+    "seqlen": 2048,
+    "batch_size": 4,
+    "dtype": "bfloat16",
+    "damp": 0.01,
+    "actorder": "static",
+    "seed": 17,
+    "sequential_target": "Qwen3_5DecoderLayer"
+  },
+  "runtime": {
+    "llmcompressor": "0.14.0",
+    "llmcompressor_record_sha256": "77d00e684fa163de37f78d37f08be491378d8271e98c4f73367d0c449ec70b8c",
+    "compressed_tensors": "0.19.0",
+    "transformers": "5.17.0",
+    "torch": "2.14.0",
+    "causal_conv1d": "1.7.0",
+    "flash_linear_attention": "0.5.2"
+  },
+  "validation": {
+    "engine": "vllm",
+    "vllm": "0.32.0",
+    "scheme": "MXFP4A16",
+    "vllm_scheme_alias": "CompressedTensorsW4A4Mxfp4",
+    "ampere_behavior": "Marlin W4A16",
+    "minimum_compute_capability": 8.0
+  },
+  "compute": {
+    "minimum_vram_mib": 18000,
+    "pipeline": "sequential",
+    "device_strategy": "cpu_model_with_sequential_gpu_onload"
+  },
+  "output": {
+    "format": "compressed-tensors",
+    "scheme": "MXFP4A16",
+    "model_name": "Qwen3.8-27B-compressed-tensors-MXFP4A16-GPTQ",
+    "architecture": "Qwen3_5ForCausalLM",
+    "text_model_type": "qwen3_5_text",
+    "expected_packed_tensor_pairs": 496,
+    "raw_model_safetensors_sha256": "fc5459be218d68b1f2ed59437462ff4aecab40ef74fa81bf46d2cb0a14527e11",
+    "text_model_safetensors_sha256": "d65f88af3ae9b22962abae6a4c47bef153490cbee237e0be008075f9edaa7fdf",
+    "text_model_config_sha256": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+    "target_engine": "vLLM",
+    "tokenizer_files": {
+      "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+      "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+      "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+      "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+      "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+    }
+  }
+}

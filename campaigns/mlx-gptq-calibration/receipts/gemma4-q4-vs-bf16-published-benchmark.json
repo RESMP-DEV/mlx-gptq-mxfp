@@ -1,0 +1,50 @@
+{
+  "recorded_at": "2026-08-22",
+  "target": "Gemma 4 26B-A4B instruction-tuned QAT",
+  "official_google_evidence": {
+    "technical_report": "https://arxiv.org/html/2607.02770#S2.SS5",
+    "launch_blog": "https://blog.google/innovation-and-ai/technology/developers-tools/quantization-aware-training-gemma-4/",
+    "bf16_text_model_gb": 52.0,
+    "q4_0_text_model_gb": 16.2,
+    "total_memory_reduction_gb": 35.8,
+    "total_memory_reduction_percent": 68.85,
+    "bf16_active_weight_gb": 7.6,
+    "q4_0_active_weight_gb": 2.8,
+    "active_memory_reduction_gb": 4.8,
+    "active_memory_reduction_percent": 63.16,
+    "quality_claim": "minimal impact on quality and higher overall quality than standard PTQ baselines",
+    "head_to_head_task_scores_published": false,
+    "caveat": "the BF16 and QAT model cards reproduce the same family benchmark table and do not identify separate precision-specific measurements"
+  },
+  "matched_logit_evidence": {
+    "source": "https://unsloth.ai/docs/models/gemma-4/qat#qat-analysis",
+    "reference": "unquantized QAT BF16 logits",
+    "best_4bit": {
+      "format": "UD-Q4_K_XL",
+      "disk_gb": 14.25,
+      "mean_kl": 0.09788,
+      "p99_9_kl": 2.7087,
+      "top1_agreement_percent": 85.63,
+      "top1_disagreement_percent": 14.37
+    },
+    "naive_q4_0": {
+      "disk_gb": 14.44,
+      "mean_kl": 0.36094,
+      "p99_9_kl": 4.542,
+      "top1_agreement_percent": 70.2
+    },
+    "best_minus_naive": {
+      "top1_agreement_percentage_points": 15.43,
+      "mean_kl_reduction_percent": 72.88,
+      "p99_9_kl_reduction_percent": 40.36,
+      "disk_gb": -0.19
+    },
+    "caveat": "KL and token top-1 agreement measure distribution fidelity to BF16, not downstream task accuracy"
+  },
+  "official_q4_0_artifact": {
+    "id": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+    "revision": "d1c082be9cf3c8a514acf63b8761f4b41935842e",
+    "main_gguf_bytes": 14439363584,
+    "mmproj_bytes": 1194828160
+  }
+}

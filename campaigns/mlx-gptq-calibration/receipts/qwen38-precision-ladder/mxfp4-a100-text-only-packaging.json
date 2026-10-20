@@ -1,0 +1,38 @@
+{
+  "architectures": [
+    "Qwen3_5ForCausalLM"
+  ],
+  "campaign": "qwen3.8-27b-mxfp4-vllm-a100",
+  "non_claims": [
+    "This packaging pass changes config/key layout only; it does not alter packed values.",
+    "Live generation and parity remain separate validation gates."
+  ],
+  "output": "/root/model-data/artifacts/Qwen3.8-27B-MXFP4A16-GPTQ-text-only",
+  "output_files": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "config.json": "873538762602808f3b895701b479f2f085d917e390d85a9788aa26b796660055",
+    "generation_config.json": "df6f86c3fdce573ecdb55cec35f502ddda70e70abe78288a78164aef120232e7",
+    "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "model.safetensors": "1b6cf393189f59763dbd330cf85fefd2508cfca63db7c13aaea8d53da71e1dd7",
+    "model.safetensors.index.json": "3cd8383312517745fda102ce43ed177e168305b0579ae46f1598c18edf570802",
+    "recipe.yaml": "6a0a36332e217bc466ea87625a40e1bfc5814963485198c8db905cdc83061d93",
+    "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+  },
+  "packed_linear_tensors": 496,
+  "recorded_at": "2026-10-20T00:39:06+00:00",
+  "scale_tensors": 496,
+  "schema": "mlx-gptq-calibration/mxfp4-text-only-packaging/2",
+  "source": "/root/model-data/artifacts/Qwen3.8-27B-MXFP4A16-GPTQ-raw",
+  "source_model_sha256": "7efcd51f35ba23a60bc0ac950a40d52f94014c6636595f3e39f045ac5324a5d7",
+  "tensor_count": 1347,
+  "tokenizer_files": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+  },
+  "tokenizer_source": "/root/model-data/Qwen3.8-27B-bf16"
+}

@@ -1,0 +1,68 @@
+{
+  "recorded_at": "2026-08-22",
+  "checkpoint_compatibility": {
+    "base": {
+      "id": "google/gemma-4-26B-A4B-it",
+      "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52"
+    },
+    "config_differences": ["transformers_version"],
+    "dtype_differences": 0,
+    "name_differences": 0,
+    "qat": {
+      "id": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+      "revision": "f1e06dc520982d9b9edd76859fdb7ab209449949"
+    },
+    "shape_differences": 0,
+    "tensor_bytes_each": 51611872412,
+    "tensor_count_each": 1013,
+    "weight_shards_each": 2
+  },
+  "overlay": {
+    "file_bytes": 21814344,
+    "match": "\\.router\\.(proj\\.weight|scale|per_expert_scale)$",
+    "sha256": "5fe02b36deb5b0e0c9a3638db6899896ca81d07d952d7cdc19e9eb13e754f952",
+    "tensor_bytes": 21803520,
+    "tensor_count": 90
+  },
+  "qat_vs_base_router": {
+    "per_expert_scale": {
+      "count": 30,
+      "exact_fraction_mean": 1.0,
+      "max_abs": 0.0,
+      "relative_l2_mean": 0.0
+    },
+    "proj": {
+      "cosine_mean": 0.986204868555069,
+      "cosine_min": 0.9795626401901245,
+      "count": 30,
+      "exact_fraction_mean": 0.009827029922356208,
+      "max_abs": 0.177734375,
+      "relative_l2_max": 0.20335784554481506,
+      "relative_l2_mean": 0.16769801278909047
+    },
+    "scale": {
+      "cosine_mean": 0.9995857735474905,
+      "cosine_min": 0.9995706677436829,
+      "count": 30,
+      "exact_fraction_mean": 0.05719696947683891,
+      "max_abs": 3.25,
+      "relative_l2_max": 0.06092894822359085,
+      "relative_l2_mean": 0.04122195299714804
+    }
+  },
+  "runtime_evidence": {
+    "exa_mcp": {
+      "initialized": true,
+      "server_name": "exa-search-server",
+      "server_version": "3.2.1",
+      "tools": ["web_search_exa", "web_fetch_exa"]
+    },
+    "qat_moe_search": {
+      "confirmed_public_sources": [
+        "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+        "jdopensource/JoyAI-LLM-Flash"
+      ],
+      "unverified_candidate": "zhuyksir/qwen3_30b_a3b_nvfp4_qat"
+    }
+  }
+}

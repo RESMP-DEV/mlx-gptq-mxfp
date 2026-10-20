@@ -1,0 +1,13 @@
+0.01.765.439 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.766.068 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.811.689 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.14.628.091 I 
+0.14.628.156 I system_info: n_threads = 8 (n_threads_batch = 8) / 32 | CUDA : ARCHS = 700,750,800,860,890 | USE_GRAPHS = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.14.628.240 I perplexity: saving all logits to /home/kearm/workloads/gemma4-logit-trace/run/b550-32x512/reference-log-probabilities.bin
+0.14.628.247 I perplexity: tokenizing the input ..
+0.15.513.306 I perplexity: tokenization took 885.05 ms
+0.15.513.485 I perplexity: calculating perplexity over 32 chunks, n_ctx=512, batch_size=512, n_seq=1
+0.19.894.837 I perplexity: 4.25 seconds per pass - ETA 2.25 minutes
+[1]1197.1932,[2]854.2825,[3]633.2059,[4]867.8923,[5]871.8095,[6]889.5964,[7]1066.4468,[8]1108.2562,[9]1285.3194,[10]1376.8104,[11]1370.7926,[12]1316.3617,[13]1314.7619,[14]1260.8104,[15]1249.5794,[16]1309.0621,[17]1186.1680,[18]1202.8678,[19]1068.8329,[20]1067.1862,[21]1010.8889,[22]956.7151,[23]861.4486,[24]773.0674,[25]721.6800,[26]683.0634,[27]634.6112,[28]594.7840,[29]581.5937,[30]588.1382,[31]567.4392,[32]570.0367,
+2.20.495.482 I Final estimate: PPL = 570.0367 +/- 33.55066
+
