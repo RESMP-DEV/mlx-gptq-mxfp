@@ -12,6 +12,14 @@ with the same E8M0 grouping. Codes, scales, and packing are verified bit-exact
 against live `mlx.core`, so the calibrated result loads as a 100% standard
 mlx-lm model. No custom kernels or runtime changes.
 
+## Stack layout
+
+This is the canonical owned MLX quantization stack. The active engine lives at
+the root; the DFlash runtime, Qwen campaign tooling, and CUDA probe lineages
+live under `runtime/`, `campaigns/`, and `cuda/`. The status owner is
+`docs/architecture.md`, and `just quality` writes the aggregate verification
+receipt.
+
 ## MoE: every expert gets real calibration
 
 transformers ≥ 5 stores experts as fused 3D parameters and dispatches with
