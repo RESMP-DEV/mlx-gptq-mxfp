@@ -23,7 +23,7 @@ provenance and non-claims is not accepted.
 | Topic | Current position | Decision gate |
 |---|---|---|
 | Default branch promotion | `work/dflash2-calibration` is complete; `main` is older | `just quality` green after subtree merges |
-| Old repository retirement | GitHub redirects retained | All references updated and no dirty clone remains |
+| Old repository retirement | Historical repositories retained read-only as subtree sources; redundant local clones removed | New work targets `mlx-stack` only |
 | Full projection matrix | Dominant activation/GEMM cases qualified; all weights qualified | Extend only when a missing shape owns measured time |
 
 ## 2026-10-20 work log
@@ -38,6 +38,10 @@ provenance and non-claims is not accepted.
 - The full quality dispatcher passed after an M4-specific DFlash verify-kernel
   deviation ceiling was pinned; receipt summary:
   `evidence/2026-10-20-mlx-stack-consolidation.md`.
+- Imported the campaign evidence formerly tracked in `RESMP-DEV/mlx`, merged
+  the pushed Qwen parity-tooling branch, and removed the three verified-clean
+  redundant local clones. `/Users/kearm/mlx-stack` is the convenience entry to
+  the canonical checkout.
 
 ## Contracts to preserve
 

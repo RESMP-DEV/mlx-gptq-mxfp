@@ -44,3 +44,11 @@ effect for other profiles.
 - Campaign and runtime tests do not qualify a new model artifact.
 - Old duplicate local clones are not deleted until their remaining branches
   and references are inventoried.
+
+## Post-acceptance cleanup
+
+After the quality gate and publication, the pushed Qwen parity-tooling branch
+was merged into the campaign subtree. The clean local clones for the old
+engine, calibration repository, and CUDA probe were removed. Their GitHub
+repositories remain available as historical subtree sources, and
+`/Users/kearm/mlx-stack` points to the canonical checkout.
