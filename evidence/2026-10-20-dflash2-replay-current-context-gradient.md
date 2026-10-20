@@ -80,8 +80,12 @@ This update still does not claim model quality or live acceptance.
 ## Mechanical run gate
 
 `tools/validate_dflash2_run.py` checks expected step count, replay-fidelity
-threshold, exactly 46 nonzero LoRA `b` tensors, and, for QAT, exactly 47
-prescribed code/scale pairs. Validation commands:
+threshold, exactly 46 nonzero current checkpoint LoRA `b` tensors, and, for
+QAT, exactly 47 prescribed code/scale pairs. It separately reports whether the
+selected export moved; validation may legitimately restore the initial
+parameters when its offline metric does not improve. `--require-selected-update`
+turns that observation into a failure for candidate-generation runs. Validation
+commands:
 
 ```text
 uvx ruff check tools/validate_dflash2_run.py \
@@ -92,5 +96,22 @@ exit 0
 3 passed
 ```
 
-The superseded v2 artifact fails the gate with `LoRA b tensors did not update:
-['fc.b']`, as intended.
+The superseded v2 artifact fails the checkpoint gate with `fc.b` unchanged.
+
+## Corrected four-cycle full-vocabulary smoke
+
+The fresh prompt-disjoint split used three training prompts/four contiguous
+cycles and one validation prompt/cycle. The corrected run exited 0 with:
+
+```text
+replay_fidelity_cosine = 0.9936231970787048
+steps = 4
+checkpoint_b_tensors = 46
+selected_b_tensors = 0
+selected_initial = true
+```
+
+All 46 current checkpoint `b` tensors moved, proving the repaired gradient path.
+The selected export restored the initial head because one validation cycle
+became worse; that is correct selection behavior, not a failed training step.
+This is a mechanism smoke, not model-quality evidence.

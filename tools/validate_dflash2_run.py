@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
+import torch
 from safetensors import safe_open
 
 
@@ -19,6 +20,20 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     if int(receipt.get("steps", -1)) != args.expected_steps:
         raise RuntimeError("run step count does not match expected steps")
 
+    checkpoint = torch.load(
+        run / "checkpoint.pt", map_location="cpu", weights_only=False
+    )
+    current_b = {
+        name: tensor
+        for name, tensor in checkpoint["current_parameters"].items()
+        if name.endswith(".b")
+    }
+    current_zero = [
+        name for name, tensor in current_b.items() if not torch.count_nonzero(tensor)
+    ]
+    if len(current_b) != 46 or current_zero:
+        raise RuntimeError(f"checkpoint LoRA b tensors did not update: {current_zero}")
+
     with safe_open(str(run / "lora_adapters.safetensors"), framework="pt") as file:
         b_tensors = sorted(key for key in file.keys() if key.endswith(".b"))
         maxima = {
@@ -28,7 +43,8 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         raise RuntimeError(f"expected 46 LoRA b tensors, found {len(b_tensors)}")
     zero = [key for key, maximum in maxima.items() if maximum == 0.0]
     if zero:
-        raise RuntimeError(f"LoRA b tensors did not update: {zero}")
+        if args.require_selected_update:
+            raise RuntimeError(f"selected LoRA b tensors did not update: {zero}")
 
     qat_pairs = 0
     if args.qat:
@@ -51,9 +67,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     return {
         "steps": receipt["steps"],
         "replay_fidelity_cosine": fidelity,
-        "lora_b_tensors": len(b_tensors),
-        "min_b_max_abs": min(maxima.values()),
-        "max_b_max_abs": max(maxima.values()),
+        "checkpoint_b_tensors": len(current_b),
+        "selected_b_tensors": len(b_tensors) - len(zero),
+        "selected_initial": bool(zero),
         "qat_grid_pairs": qat_pairs,
     }
 
@@ -64,6 +80,7 @@ def main() -> None:
     parser.add_argument("--expected-steps", required=True, type=int)
     parser.add_argument("--fidelity-threshold", type=float, default=0.97)
     parser.add_argument("--qat", action="store_true")
+    parser.add_argument("--require-selected-update", action="store_true")
     arguments = parser.parse_args()
     print(json.dumps(validate(arguments), indent=2))
 

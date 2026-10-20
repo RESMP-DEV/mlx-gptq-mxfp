@@ -17,6 +17,16 @@ def _run(
     for index in range(46):
         value = 0.0 if zero_b and index == 0 else 0.125
         adapters[f"layers.{index}.b"] = torch.tensor([value])
+    torch.save(
+        {
+            "step": 128,
+            "current_parameters": {
+                f"layers.{index}.b": torch.tensor([0.125])
+                for index in range(46)
+            },
+        },
+        run / "checkpoint.pt",
+    )
     save_file(adapters, str(run / "lora_adapters.safetensors"))
     (run / "receipt.json").write_text(
         json.dumps(
@@ -43,23 +53,28 @@ def test_validate_accepts_nonzero_lora_updates(tmp_path: Path):
             expected_steps=128,
             fidelity_threshold=0.97,
             qat=False,
+            require_selected_update=False,
         )
     )
 
-    assert result["lora_b_tensors"] == 46
-    assert result["min_b_max_abs"] == 0.125
+    assert result["checkpoint_b_tensors"] == 46
+    assert result["selected_b_tensors"] == 46
 
 
-def test_validate_rejects_zero_lora_update(tmp_path: Path):
-    with pytest.raises(RuntimeError, match="did not update"):
-        validate(
-            argparse.Namespace(
-                run=_run(tmp_path, zero_b=True),
-                expected_steps=128,
-                fidelity_threshold=0.97,
-                qat=False,
-            )
-        )
+def test_validate_allows_initial_selection_but_can_require_update(tmp_path: Path):
+    arguments = argparse.Namespace(
+        run=_run(tmp_path, zero_b=True),
+        expected_steps=128,
+        fidelity_threshold=0.97,
+        qat=False,
+        require_selected_update=False,
+    )
+    result = validate(arguments)
+
+    assert result["selected_initial"] is True
+    arguments.require_selected_update = True
+    with pytest.raises(RuntimeError, match="selected LoRA b tensors"):
+        validate(arguments)
 
 
 def test_validate_counts_qat_prescribed_grids(tmp_path: Path):
@@ -69,6 +84,7 @@ def test_validate_counts_qat_prescribed_grids(tmp_path: Path):
             expected_steps=128,
             fidelity_threshold=0.97,
             qat=True,
+            require_selected_update=False,
         )
     )
 
