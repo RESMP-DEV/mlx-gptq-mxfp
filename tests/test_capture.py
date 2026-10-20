@@ -1,8 +1,8 @@
 """Capture: fused-expert F.linear interception and nn.Linear input dedup."""
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from mlx_gptq.capture import CaptureManager
 
@@ -79,3 +79,40 @@ def test_expert_routing_capture_and_dedup():
     H = mgr.stashes[gu.stash_keys[0]].hessian("cpu")
     assert H.shape == (32, 32) and torch.isfinite(H).all()
     mgr.check_capture_happened()
+
+
+class SparseRouteLayer(nn.Module):
+    def __init__(self, E=4, H=32, I=32):
+        super().__init__()
+        self.experts = FusedExperts(E=E, H=H, I=I)
+
+    def forward(self, x):
+        top = torch.zeros((x.shape[0], 1), dtype=torch.long, device=x.device)
+        return self.experts(x, top)
+
+
+def test_unrouted_experts_get_activation_aware_fallback():
+    torch.manual_seed(0)
+    layer = SparseRouteLayer()
+    mgr = CaptureManager(layer, exclude_regex=None, group_size=32)
+    x = torch.randn(96, 32)
+
+    with mgr:
+        mgr.begin_batch()
+        layer(x)
+
+    gate_up = next(t for t in mgr.fused_tasks if t.param_name == "gate_up_proj")
+    down = next(t for t in mgr.fused_tasks if t.param_name == "down_proj")
+    assert mgr.stashes[gate_up.stash_keys[0]].tokens == 96
+    assert mgr.stashes[gate_up.stash_keys[1]].tokens == 0
+
+    backfilled = mgr.backfill_unrouted_experts()
+
+    assert backfilled == {"experts": [1, 2, 3]}
+    for expert in range(1, 4):
+        gate_key = gate_up.stash_keys[expert]
+        down_key = down.stash_keys[expert]
+        assert mgr.stashes[gate_key].tokens == 64
+        assert mgr.stashes[down_key].tokens == 64
+        assert mgr.fallback_experts[gate_key] == "all_expert_inputs"
+        assert mgr.fallback_experts[down_key] == "all_expert_inputs"
