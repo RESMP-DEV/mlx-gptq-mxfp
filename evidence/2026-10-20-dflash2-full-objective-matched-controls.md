@@ -91,3 +91,38 @@ training prompts/128 contiguous cycles and four validation prompts/16 cycles.
 Its per-prompt dataset indices are contiguous, with 3-12 training and 2-5
 validation cycles per group. This receipt still does not claim data quality or
 runtime acceptance.
+
+## Update: matched CPU smoke pair executed
+
+Both arms ran end to end on one prompt-disjoint split
+(`/Users/kearm/mlx/build/data/dflash2-prefix-split-p4-p1-20261020`: three
+training prompt groups with four contiguous cycles each, one validation group,
+seed 43, rank 8, alpha 16, LR `2e-6`, hybrid selector plus full-vocabulary CE
+weight 0.1 and TV weight 0.9, device CPU, one epoch, four steps).
+
+| Property | BF16 arm | QAT arm |
+| --- | --- | --- |
+| Output | `fulllogit-prefix-smoke-4-v5` | `fulllogit-prefix-smoke-4-qat-v2` |
+| Exit | 0 | 0 |
+| Replay fidelity | 0.99362 | 0.99362 |
+| Checkpoint LoRA `b` updated | 46/46 | 46/46 |
+| Prescribed QAT grid pairs | n/a | 47 |
+| Validation loss (1 cycle) | 3.0679 | 2.4555 |
+| Full-vocab CE (1 cycle) | 14.7500 | 10.0936 |
+
+The two training fingerprints differ in exactly one key, `qat_mxfp4`. Both arms
+passed `tools/validate_dflash2_run.py` with exit 0. Both selected the initial
+head because a single validation cycle is far too small to select on; the
+gradient evidence is in the checkpoint parameters, not the selected export.
+
+This also proves the prescribed-grid export path end to end on a real model: the
+QAT arm emitted 47 code/scale pairs and `tools/export_rtn_mxfp4.py --qat-source`
+consumes them instead of reselecting scales.
+
+Non-claims for this smoke:
+
+- One validation cycle and four training steps cannot rank QAT against RTN.
+- CPU fake-quant dominates the wall clock; these timings say nothing about a
+  CUDA MXFP4 kernel.
+- No live acceptance, target parity, or promotion was run, and no artifact was
+  packed or uploaded.
