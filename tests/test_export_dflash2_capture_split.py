@@ -62,6 +62,8 @@ def test_export_split_copies_only_selected_cycle_files(tmp_path: Path):
         validation_fraction=0.25,
         train_cycle_limit=4,
         validation_cycle_limit=2,
+        train_prompt_limit=2,
+        validation_prompt_limit=1,
         seed=17,
     )
     receipt = export_split(args)
@@ -78,6 +80,8 @@ def test_export_split_copies_only_selected_cycle_files(tmp_path: Path):
     }
     assert receipt["train_cycles"] == 4
     assert receipt["validation_cycles"] == 2
+    assert receipt["selected_train_prompts"] == 2
+    assert receipt["selected_validation_prompts"] == 1
     assert train_prompt_ids.isdisjoint(validation_prompt_ids)
     assert len(list((tmp_path / "split/train/cycles").iterdir())) == 4
     assert len(list((tmp_path / "split/validation/cycles").iterdir())) == 2

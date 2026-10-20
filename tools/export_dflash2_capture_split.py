@@ -112,6 +112,14 @@ def export_split(args: argparse.Namespace) -> dict[str, Any]:
     train_prompts, validation_prompts = split_prompts(
         prompt_indices, args.validation_fraction, args.seed
     )
+    if args.train_prompt_limit > 0:
+        if args.train_prompt_limit > len(train_prompts):
+            raise ValueError("train prompt limit exceeds the training partition")
+        train_prompts = train_prompts[: args.train_prompt_limit]
+    if args.validation_prompt_limit > 0:
+        if args.validation_prompt_limit > len(validation_prompts):
+            raise ValueError("validation prompt limit exceeds the partition")
+        validation_prompts = validation_prompts[: args.validation_prompt_limit]
     train_set = set(train_prompts)
     validation_set = set(validation_prompts)
     train_records = [
@@ -178,6 +186,8 @@ def main() -> None:
     parser.add_argument("--validation-fraction", type=float, required=True)
     parser.add_argument("--train-cycle-limit", type=int, default=0)
     parser.add_argument("--validation-cycle-limit", type=int, default=0)
+    parser.add_argument("--train-prompt-limit", type=int, default=0)
+    parser.add_argument("--validation-prompt-limit", type=int, default=0)
     parser.add_argument("--seed", type=int, default=17)
     arguments = parser.parse_args()
     print(json.dumps(export_split(arguments), indent=2))

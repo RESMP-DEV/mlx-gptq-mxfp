@@ -64,3 +64,30 @@ two-sided paired-test threshold.
   quality or runtime acceptance.
 - The active 128-cycle CPU smoke was loaded before this change and was not
   restarted; its eventual receipt still evaluates the prior corrected trainer.
+
+## Update: bounded complete session groups
+
+Added after the first smoke exposed the severed `fc` gradient: the exporter also
+accepts `--train-prompt-limit` and `--validation-prompt-limit`. This selects a
+deterministic subset of the already shuffled prompt partition before applying
+contiguous cycle-prefix limits. A smoke can therefore guarantee several cycles
+per prompt instead of spreading a tiny cycle budget across hundreds of
+first-cycle entries.
+
+Validation:
+
+```text
+uvx ruff check tools/export_dflash2_capture_split.py \
+  tests/test_export_dflash2_capture_split.py
+exit 0
+
+.venv/bin/python -m pytest tests/test_export_dflash2_capture_split.py -q
+3 passed
+```
+
+The fresh smoke split at
+`/Users/kearm/mlx/build/data/dflash2-prefix-split-p16-p4-20261020` has 16
+training prompts/128 contiguous cycles and four validation prompts/16 cycles.
+Its per-prompt dataset indices are contiguous, with 3-12 training and 2-5
+validation cycles per group. This receipt still does not claim data quality or
+runtime acceptance.
