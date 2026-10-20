@@ -10,7 +10,7 @@ from pathlib import Path
 
 import torch
 from mlx_gptq.artifacts import ArtifactWriter
-from mlx_gptq.grid import rtn_quantize_mxfp
+from mlx_gptq.grid import MX_GROUP_SIZE, rtn_quantize_mxfp
 from safetensors.torch import load_file
 
 _LAYER_SUFFIXES = frozenset(
@@ -56,12 +56,21 @@ def export(args: argparse.Namespace) -> dict[str, object]:
     names = target_tensor_names(weights)
     if not names:
         raise RuntimeError("model contains no DFlash2 MXFP4 target tensors")
+    algorithm = "qat-prescribed-grid" if args.qat_source else "rtn"
+    qat_parameters = None
+    if args.qat_source:
+        metadata_path = source / "qat_mxfp4.safetensors"
+        if not metadata_path.is_file():
+            raise FileNotFoundError(
+                "QAT export requires trainer-emitted qat_mxfp4.safetensors"
+            )
+        qat_parameters = load_file(str(metadata_path))
 
     writer = ArtifactWriter(
         str(output),
         {
             "model": str(source),
-            "algorithm": "rtn-qat",
+            "algorithm": algorithm,
             "mode": "mxfp4",
             "bits": 4,
             "group_size": 32,
@@ -73,25 +82,43 @@ def export(args: argparse.Namespace) -> dict[str, object]:
     metadata = {}
     for name in names:
         weight = weights[f"{name}.weight"].float()
-        if weight.shape[-1] % 32:
+        if weight.shape[-1] % MX_GROUP_SIZE:
             raise ValueError(f"{name} input width is not divisible by 32")
-        q, scales, _biases, _dq = rtn_quantize_mxfp(weight[None], "mxfp4")
-        tensors[name] = (q[0], scales[0], None)
+        if qat_parameters is None:
+            q, scales, _biases, _dq = rtn_quantize_mxfp(weight[None], "mxfp4")
+            q = q[0]
+            scales = scales[0]
+        else:
+            try:
+                q = qat_parameters[f"{name}.q"]
+                scales = qat_parameters[f"{name}.scales"]
+            except KeyError as error:
+                raise RuntimeError(f"QAT metadata is missing {name}") from error
+            expected_q = (weight.shape[0], weight.shape[1])
+            expected_scales = (
+                weight.shape[0],
+                weight.shape[1] // MX_GROUP_SIZE,
+            )
+            if tuple(q.shape) != expected_q or q.dtype != torch.uint8:
+                raise RuntimeError(f"{name} QAT codes have the wrong layout")
+            if tuple(scales.shape) != expected_scales or scales.dtype != torch.uint8:
+                raise RuntimeError(f"{name} QAT scales have the wrong layout")
+        tensors[name] = (q, scales, None)
         metadata[name] = {
             "bits": 4,
             "group_size": 32,
             "mode": "mxfp4",
             "kind": "dflash2-linear",
             "out_features": int(q.shape[1]),
-            "in_features": int(q.shape[2]),
+            "in_features": int(q.shape[1]),
         }
     writer.write_layer(0, tensors, metadata)
     return {
         "schema_version": 1,
         "model": str(source),
         "output": str(output),
-        "algorithm": "rtn-qat",
-        "source": "qat" if args.qat_source else "bf16",
+        "algorithm": algorithm,
+        "source": "qat-prescribed-grid" if args.qat_source else "bf16",
         "tensors": len(names),
         "elapsed_seconds": time.time() - started,
         "non_claims": [

@@ -21,6 +21,7 @@ from .dflash2_replay import (
     _prompt_order,
     replay_fidelity,
 )
+from .grid import MX_GROUP_SIZE, choose_mxfp_scale, quantize_mxfp_with_scale
 from .qat import fake_quantize_mxfp4
 
 
@@ -293,16 +294,37 @@ def _lora_parameters(model: torch.nn.Module) -> dict[str, torch.Tensor]:
     return result
 
 
-def _merge_lora(model: torch.nn.Module) -> None:
+def _mxfp4_parameters(
+    weight: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return the exact QAT MXFP4 codes, E8M0 scales, and effective values."""
+    grouped = weight.detach().float().reshape(
+        *weight.shape[:-1], -1, MX_GROUP_SIZE
+    )
+    scale_bytes, scales = choose_mxfp_scale(grouped, "mxfp4")
+    codes, effective = quantize_mxfp_with_scale(grouped, scales, "mxfp4")
+    return (
+        codes.reshape(weight.shape).contiguous(),
+        scale_bytes.reshape(*weight.shape[:-1], -1).contiguous(),
+        effective.reshape(weight.shape),
+    )
+
+
+def _merge_lora(
+    model: torch.nn.Module, artifacts: dict[str, torch.Tensor] | None = None
+) -> None:
     with torch.no_grad():
-        for module in [
-            item for item in model.modules() if isinstance(item, LoRALinear)
-        ]:
+        for name, module in model.named_modules():
+            if not isinstance(module, LoRALinear):
+                continue
             effective = module.base.weight.float() + (
                 module.b @ module.a * module.scaling
             )
             if module.qat_mxfp4:
-                effective = fake_quantize_mxfp4(effective)
+                codes, scales, effective = _mxfp4_parameters(effective)
+                if artifacts is not None:
+                    artifacts[f"{name}.q"] = codes
+                    artifacts[f"{name}.scales"] = scales
             module.base.weight.copy_(effective.to(module.base.weight.dtype))
 
 
@@ -869,9 +891,17 @@ def run(args):
         os.replace(temporary_checkpoint, checkpoint_path)
     validation_metrics = initial_metrics
     _restore_parameters(model, best_parameters)
-    projection_export = (
-        fake_quantize_mxfp4(projection) if args.qat_mxfp4 else projection
-    )
+    qat_artifacts: dict[str, torch.Tensor] = {}
+    if args.qat_mxfp4:
+        projection_codes, projection_scales, projection_export = _mxfp4_parameters(
+            projection
+        )
+        qat_artifacts["candidate_selector.hidden_projection.q"] = projection_codes
+        qat_artifacts[
+            "candidate_selector.hidden_projection.scales"
+        ] = projection_scales
+    else:
+        projection_export = projection
     save_file(
         {"weight": projection_export.detach().cpu().contiguous()},
         str(output / "distilled_hidden_projection.safetensors"),
@@ -881,8 +911,10 @@ def run(args):
             _lora_parameters(model),
             str(output / "lora_adapters.safetensors"),
         )
-        _merge_lora(model)
+        _merge_lora(model, qat_artifacts if args.qat_mxfp4 else None)
         _remove_lora(model)
+    if args.qat_mxfp4:
+        save_file(qat_artifacts, str(output / "qat_mxfp4.safetensors"))
     save_file(model.state_dict(), str(output / "model.safetensors"))
     training_memory = _cuda_memory_snapshot(device)
     receipt = {
@@ -908,6 +940,7 @@ def run(args):
         "distribution_tv_weight": args.distribution_tv_weight,
         "triton_dynamic_conv": args.triton_dynamic_conv,
         "qat_mxfp4": args.qat_mxfp4,
+        "qat_mxfp4_tensors": len(qat_artifacts) // 2,
         "replay_draft": args.replay_draft,
         "replay_fidelity_cosine": fidelity,
         "steps": step,
