@@ -23,9 +23,22 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _config_source(model: Path, config_root: Path | None) -> Path:
+    """Prefer an explicit config root, then the weights directory."""
+    if config_root is not None:
+        if not (config_root / "config.json").is_file():
+            raise FileNotFoundError(config_root / "config.json")
+        return config_root
+    if (model / "config.json").is_file():
+        return model
+    raise FileNotFoundError(model / "config.json")
+
+
 def pack(args: argparse.Namespace) -> dict[str, object]:
     source = Path(args.model)
     calibration = Path(args.calibration)
+    config_root = getattr(args, "config_root", None)
+    config_dir = _config_source(source, Path(config_root) if config_root else None)
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
 
@@ -48,7 +61,7 @@ def pack(args: argparse.Namespace) -> dict[str, object]:
 
     model_path = output / "model.safetensors"
     save_file(weights, str(model_path))
-    config = json.loads((source / "config.json").read_text(encoding="utf-8"))
+    config = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
     config["quantization"] = {
         "group_size": int(reader.manifest["group_size"]),
         "bits": int(reader.manifest["bits"]),
@@ -65,13 +78,14 @@ def pack(args: argparse.Namespace) -> dict[str, object]:
         "merges.txt",
         "vocab.json",
     ):
-        candidate = source / name
+        candidate = config_dir / name
         if candidate.is_file():
             shutil.copyfile(candidate, output / name)
 
     receipt = {
         "schema_version": 1,
         "source": str(source),
+        "config_source": str(config_dir),
         "calibration": str(calibration),
         "mode": config["quantization"]["mode"],
         "bits": config["quantization"]["bits"],
@@ -97,6 +111,10 @@ def main(argv=None) -> int:
     parser.add_argument("--model", required=True)
     parser.add_argument("--calibration", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--config-root",
+        help="directory holding config.json when --model is a weights-only run",
+    )
     args = parser.parse_args(argv)
     receipt = pack(args)
     print(json.dumps(receipt, indent=2))
