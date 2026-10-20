@@ -180,11 +180,68 @@ vendor or redistribute official source or weights into a public repository
 without a separate license decision. The Qwen target's Apache-2.0 license does
 not relicense the drafter.
 
+## Implementation bring-up
+
+The first correctness-only implementation landed through worker commit
+`5dcc124` and merge commit `d556853`:
+
+- `runtime/dflash-mlx/dflash_mlx/draft/eagle4.py`
+- `runtime/dflash-mlx/dflash_mlx/draft/checkpoint.py`
+- `runtime/dflash-mlx/dflash_mlx/runtime/loading.py`
+- `runtime/dflash-mlx/dflash_mlx/runtime/bundle.py`
+- `runtime/dflash-mlx/tests/test_eagle4_draft.py`
+- `runtime/dflash-mlx/tests/test_eagle4_target_capture.py`
+
+The parser accepts only the dense, rotary, sliding-window, full-vocabulary,
+rank-128 low-rank profile represented by the pinned Qwen checkpoint. It checks
+config/weight dtype consistency and strict names, shapes, and dtypes. The model
+implements independent aux-state norms, target-feature `fc`, independent token
+and hidden-feature norms, the fused 2H QKV layer, per-row RoPE, sliding-window
+attention, target-embedding sharing, full logits, rank-128 candidate selection,
+and exact full-head selected-row rescoring.
+
+The implementation is a clean re-expression of the pinned EAGLE-4 formulas, not
+a vendored copy. Its source provenance and
+`LicenseRef-Eagle-4-Source-Available` boundary are stated in the module header
+and this receipt. It remains an internal RESMP research port until a separate
+license decision permits redistribution.
+
+An independent read-only review confirmed the formula, shape, tensor-name,
+aux-layer, target-embedding, and candidate-head mapping. Its blocker was that
+ordinary runtime dispatch would hand the incompatible model to the existing
+DFlash backend. The repair keeps `load_draft_bundle` useful for direct schema
+and numerical bring-up, while `load_runtime_bundle` now rejects EAGLE-4 with a
+clear error until a dedicated engine backend exists. The review also led to
+dtype/config cross-checks, stricter missing-config diagnostics, and this
+provenance record.
+
+Validation at merged head `d556853`:
+
+```bash
+PYTHONPATH=/Users/kearm/mlx-stack/runtime/dflash-mlx:/Users/kearm/mlx-stack \
+  uv run --no-project \
+  --with mlx==0.32.1 --with mlx-lm==0.31.3 --with pytest \
+  pytest tests/test_eagle4_draft.py tests/test_eagle4_target_capture.py \
+  tests/test_target_qwen_tree.py tests/test_draft_config_schema.py \
+  tests/test_runtime_bundle.py tests/test_gemma4_draft.py -q
+```
+
+Result: 69 passed.
+
+The real 6.2 GB checkpoint was then lazy-loaded from the merged head. It
+exposed exactly 19 BF16 tensors with configured dtype BF16. A one-token
+real-weight Metal smoke produced finite hidden state `[1,1,5120]`, finite full
+logits `[1,1,248320]`, 128 selected candidates, and selected-logit rescoring
+against the full-head reference with maximum absolute difference `0`.
+
 ## Non-claims
 
-- This record does not prove runtime numerical parity on the 27B checkpoint.
-- No MLX target hidden-state hooks, tree state branching, or end-to-end
-  speculative generation were exercised while writing this record.
+- The real-weight smoke used a random target feature vector; it does not prove
+  27B target-hook numerical parity.
+- No dedicated EAGLE-4 draft backend, draft KV cache, tree state branching, or
+  end-to-end speculative generation is implemented yet.
+- `load_runtime_bundle` intentionally rejects EAGLE-4 before the existing
+  DFlash backend receives it.
 - The B300 speeds in the official model card are not Apple Silicon results.
 - Compatibility with the owned calibrated MXFP4 target is not yet measured.
 - No official upstream repository, issue tracker, or model repository was

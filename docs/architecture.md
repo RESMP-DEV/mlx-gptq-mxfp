@@ -52,6 +52,11 @@ provenance and non-claims is not accepted.
   paper, target-vocabulary contract, low-rank/full-head behavior, and Qwen GDN
   verification constraint are recorded in
   `evidence/2026-10-20-eagle4-qwen38-27b-mlx-port-research.md`.
+- Added the first EAGLE-4 MLX draft model and strict loader/schema gate. The
+  real Qwen checkpoint lazy-loads all 19 BF16 tensors and passes a one-token
+  Metal full-head/candidate-head smoke; the existing DFlash engine backend is
+  explicitly gated until the EAGLE adapter is built. See the implementation
+  section of the same evidence receipt.
 
 ## Contracts to preserve
 
