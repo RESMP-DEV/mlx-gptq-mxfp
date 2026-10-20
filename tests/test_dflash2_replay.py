@@ -161,3 +161,32 @@ def test_replay_fidelity_passes_on_matching_hidden_states():
     median, count = replay_fidelity(model, dataset, "cpu", limit=4, threshold=0.999)
     assert count == 4
     assert median > 0.999
+
+
+def test_cache_is_reusable_after_no_grad_evaluation():
+    """Eval under no_grad must not poison a later training backward.
+
+    The cache persists across the initial evaluation and the first training
+    step. Cached keys and values must be detached so the training graph does not
+    try to backward through tensors whose graph was already freed.
+    """
+    model = _Model()
+    order = {0: [0, 1, 2]}
+    caches = PromptCaches(len(model.layers), order)
+
+    def payload():
+        return {
+            "context": torch.randn(1, 3, 8),
+            "raw_context": None,
+            "noise_embedding": torch.randn(1, 2, 8),
+        }
+
+    # Populate the cache under no_grad, as the initial evaluation does.
+    with torch.no_grad():
+        caches.replay(model, payload(), 0, 0)
+        caches.replay(model, payload(), 0, 1)
+
+    # A training step reusing that cache must still be able to backward.
+    hidden = caches.replay(model, payload(), 0, 2)
+    hidden.sum().backward()
+    assert hidden.shape == (1, 1, 8)

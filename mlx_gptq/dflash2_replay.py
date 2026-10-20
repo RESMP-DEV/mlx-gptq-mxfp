@@ -119,8 +119,8 @@ def _layer_attention(layer, hidden, context, cache, model):
     noise_keys = _rope(model, noise_keys, query_positions)
 
     if ctx_keys.shape[2] > 0:
-        cache["keys"] = ctx_keys if cache["keys"] is None else torch.cat([cache["keys"], ctx_keys], dim=2)
-        cache["values"] = ctx_values if cache["values"] is None else torch.cat([cache["values"], ctx_values], dim=2)
+        cache["keys"] = ctx_keys.detach() if cache["keys"] is None else torch.cat([cache["keys"], ctx_keys.detach()], dim=2)
+        cache["values"] = ctx_values.detach() if cache["values"] is None else torch.cat([cache["values"], ctx_values.detach()], dim=2)
         cache["positions"] = (
             span_positions
             if cache["positions"] is None
