@@ -46,7 +46,7 @@ uvx ruff check \
 exit 0
 
 .venv/bin/python -m pytest tests/ -q
-66 passed, 5 skipped
+67 passed, 5 skipped
 ```
 
 The later count includes the run validator; the focused exporter test has four
