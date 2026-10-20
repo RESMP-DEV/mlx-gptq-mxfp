@@ -8,7 +8,7 @@ readme = "README.md"
 dependencies = [
     "accelerate>=1.10",
     "torch>=2.4",
-    "transformers>=4.55",
+    "transformers>=5.17",
     "safetensors>=0.4",
     "numpy",
     "tqdm",
