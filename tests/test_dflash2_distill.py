@@ -5,20 +5,21 @@ import torch
 from mlx_gptq import dflash2_distill
 from mlx_gptq.dflash2_distill import (
     LoRALinear,
+    _capture_order,
     _cycle_loss,
     _distribution_loss,
     _evaluate_cycles,
     _flat_metrics,
     _install_lora,
     _merge_lora,
+    _mxfp4_parameters,
     _prompt_split,
     _remove_lora,
     _selector_loss,
     _stratified_indices,
     _use_captured_hidden,
-    _capture_order,
 )
-from mlx_gptq.grid import rtn_quantize_mxfp
+from mlx_gptq.grid import dequantize_mxfp, rtn_quantize_mxfp
 from mlx_gptq.qat import fake_quantize_mxfp4
 
 
@@ -181,6 +182,17 @@ def test_qat_merge_exports_fake_quantized_weights():
     exported = torch.nn.functional.linear(input, module.base.weight)
 
     torch.testing.assert_close(trained, exported)
+
+
+def test_mxfp4_parameters_round_trip_is_exact_after_cast():
+    """Prescribed codes and scales must reproduce the saved BF16 weight."""
+    torch.manual_seed(41)
+    weight = torch.randn(32, 64).to(torch.bfloat16)
+    codes, scales, effective = _mxfp4_parameters(weight)
+    saved = effective.to(torch.bfloat16)
+    restored = dequantize_mxfp(codes, scales, "mxfp4").reshape(saved.shape)
+
+    torch.testing.assert_close(saved, restored.to(torch.bfloat16), rtol=0, atol=0)
 
 
 def test_fake_quantize_mxfp4_straight_through_gradient():

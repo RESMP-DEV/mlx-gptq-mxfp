@@ -921,6 +921,7 @@ def run(args):
         ] = projection_scales
     else:
         projection_export = projection
+    selector.weight.data.copy_(projection_export)
     save_file(
         {"weight": projection_export.detach().cpu().contiguous()},
         str(output / "distilled_hidden_projection.safetensors"),
