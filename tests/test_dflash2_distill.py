@@ -16,6 +16,7 @@ from mlx_gptq.dflash2_distill import (
     _selector_loss,
     _stratified_indices,
     _use_captured_hidden,
+    _capture_order,
 )
 from mlx_gptq.grid import rtn_quantize_mxfp
 from mlx_gptq.qat import fake_quantize_mxfp4
@@ -343,6 +344,15 @@ def test_prompt_split_never_leaks_a_prompt():
     assert train_prompts.isdisjoint(validation_prompts)
     assert set(validation_prompts) == {prompt_ids[index] for index in validation}
     assert len(train) + len(validation) == len(prompt_ids)
+
+
+def test_capture_order_keeps_each_prompt_contiguous():
+    prompt_ids = [7, 7, 8, 8, 9]
+
+    order = _capture_order([4, 0, 2, 1, 3], prompt_ids)
+
+    assert order == [0, 1, 2, 3, 4]
+    assert [prompt_ids[index] for index in order] == [7, 7, 8, 8, 9]
 
 
 def test_external_validation_capture_must_be_prompt_disjoint(monkeypatch):

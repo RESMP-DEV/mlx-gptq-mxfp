@@ -152,6 +152,16 @@ def _datasets(
     return train, train, train_ids, validation_ids, validation_prompts, fraction
 
 
+def _capture_order(indices: list[int], prompt_ids: list[int]) -> list[int]:
+    """Visit each prompt's selected cycles in capture order."""
+    selected = set(indices)
+    groups: dict[int, list[int]] = {}
+    for index, prompt_id in enumerate(prompt_ids):
+        if index in selected:
+            groups.setdefault(int(prompt_id), []).append(index)
+    return [index for indices in groups.values() for index in indices]
+
+
 class LoRALinear(torch.nn.Module):
     def __init__(
         self, base: torch.nn.Linear, rank: int, alpha: float, qat_mxfp4: bool = False
@@ -650,6 +660,8 @@ def run(args):
     elif args.loss_mode != "selector" and args.selection_metric == "prefix":
         raise ValueError("prefix selection is only valid for selector loss")
     torch.manual_seed(args.seed)
+    if args.replay_draft and args.stratified_limit and args.limit > 0:
+        raise ValueError("stratified cycle sampling is incompatible with replay")
     model = _load_reference(args.model, args.dflash_package, device)
     model.qat_mxfp4 = args.qat_mxfp4
     lm_head = None
@@ -785,9 +797,7 @@ def run(args):
         if wandb_run is not None:
             wandb_run.log({"epoch": -1, **_flat_metrics("validation", initial_metrics)})
     for epoch in range(start_epoch, args.epochs):
-        order = list(ids)
-        random.Random(args.seed + epoch).shuffle(order)
-        for index in order:
+        for index in _capture_order(ids, dataset.prompt_ids):
             payload, prompt_id = dataset[index]
             with torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16):
                 hidden = _forward(

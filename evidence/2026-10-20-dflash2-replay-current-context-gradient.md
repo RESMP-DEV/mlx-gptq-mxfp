@@ -52,3 +52,27 @@ full-head acceptance.
 - This repair proves gradient flow and replay fidelity, not live acceptance.
 - A fresh full-vocabulary smoke or GPU run is required before objective-level
   conclusions.
+
+## Update: capture-order training
+
+A read-only audit correctly found that the trainer's random global shuffle put
+nearly every replay visit out of prompt-local capture order. `PromptCaches`
+would reset at a later cycle without reconstructing its skipped prefix, so RoPE
+and cache age no longer matched serving even when exported prompt groups were
+contiguous.
+
+The trainer now visits selected cycles in prompt-local capture order and rejects
+`--stratified-limit` with replay enabled. The fidelity sampler now takes
+contiguous prefixes across multiple prompts and cache ages instead of only the
+first global slice. A retained-prefix fix also keeps differentiable current
+context aligned with trimmed cache positions.
+
+An attempted v3 launch exposed the trim/count mismatch and exited before
+training; it was stopped and is not an artifact. After repair:
+
+```text
+.venv/bin/python -m pytest tests/ -q
+63 passed, 5 skipped
+```
+
+This update still does not claim model quality or live acceptance.

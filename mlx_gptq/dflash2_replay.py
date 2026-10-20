@@ -143,15 +143,20 @@ def _layer_attention(layer, hidden, context, cache, model):
     cache["offset"] = offset + ctx_len
     _trim(cache)
 
+    retained_previous = max(0, cache["keys"].shape[2] - ctx_keys.shape[2])
     context_keys = (
         ctx_keys
         if previous_keys is None
-        else torch.cat([previous_keys, ctx_keys], dim=2)
+        else torch.cat(
+            [previous_keys[:, :, -retained_previous:, :], ctx_keys], dim=2
+        )
     )
     context_values = (
         ctx_values
         if previous_values is None
-        else torch.cat([previous_values, ctx_values], dim=2)
+        else torch.cat(
+            [previous_values[:, :, -retained_previous:, :], ctx_values], dim=2
+        )
     )
     keys = torch.cat([context_keys, noise_keys], dim=2)
     values = torch.cat([context_values, noise_values], dim=2)
@@ -252,6 +257,19 @@ def _prompt_order(dataset):
     return order
 
 
+def _fidelity_plan(dataset, limit: int) -> list[int]:
+    """Choose contiguous prefixes across several prompts and cache ages."""
+    groups = list(_prompt_order(dataset).values())
+    if not groups:
+        return []
+    group_count = min(len(groups), max(1, limit // 4))
+    depth = -(-limit // group_count)
+    plan: list[int] = []
+    for group in groups[:group_count]:
+        plan.extend(group[:depth])
+    return sorted(plan[:limit])
+
+
 def replay_fidelity(model, dataset, device, *, limit=32, threshold=0.97):
     """Median cosine between cached replay and runtime-captured hidden states.
 
@@ -262,15 +280,30 @@ def replay_fidelity(model, dataset, device, *, limit=32, threshold=0.97):
     caches = PromptCaches(len(model.layers), _prompt_order(dataset))
     cosines = []
     with torch.no_grad():
-        for index in range(min(limit, len(dataset))):
+        for index in _fidelity_plan(dataset, min(limit, len(dataset))):
             payload, prompt_id = dataset[index]
-            context = draft_context_for(model, payload).to(device)
-            noise = payload["noise_embedding"].to(device)
+            local = {
+                "context": payload["context"].to(device),
+                "raw_context": (
+                    payload["raw_context"].to(device)
+                    if payload.get("raw_context") is not None
+                    else None
+                ),
+                "noise_embedding": payload["noise_embedding"].to(device),
+            }
             captured = payload["selector_hidden"].to(device).float()
-            got = caches.replay(model, {"context": context, "raw_context": payload.get("raw_context"), "noise_embedding": noise}, int(prompt_id), index).float()
+            got = caches.replay(
+                model, local, int(prompt_id), index
+            ).float()
             if got.shape != captured.shape:
                 continue
-            cosines.append(float(F.cosine_similarity(got.flatten(), captured.flatten(), dim=0)))
+            cosines.append(
+                float(
+                    F.cosine_similarity(
+                        got.flatten(), captured.flatten(), dim=0
+                    )
+                )
+            )
     if not cosines:
         raise RuntimeError("replay fidelity produced no comparable cycles")
     cosines.sort()

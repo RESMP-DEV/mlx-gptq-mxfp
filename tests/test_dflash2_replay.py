@@ -4,6 +4,7 @@ from mlx_gptq.dflash2_replay import (
     CONTEXT_SINK,
     CONTEXT_WINDOW,
     PromptCaches,
+    _fidelity_plan,
     _spans,
     draft_context_for,
     new_cache,
@@ -88,6 +89,16 @@ def test_prompt_caches_reset_on_out_of_order_visit():
     # Revisiting an earlier cycle must rebuild rather than continue.
     caches.replay(model, payload, 0, 0)
     assert caches.state[0][1] == 0
+
+
+def test_fidelity_plan_covers_multiple_prompt_prefixes():
+    class Dataset:
+        prompt_ids = [0, 0, 0, 1, 1, 1, 2, 2, 2]
+
+    plan = _fidelity_plan(Dataset(), limit=8)
+
+    assert plan == [0, 1, 2, 3, 4, 5]
+    assert {Dataset.prompt_ids[index] for index in plan} == {0, 1}
 
 
 def test_replay_context_runs_and_keeps_shape():
