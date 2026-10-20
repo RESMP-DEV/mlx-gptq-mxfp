@@ -118,9 +118,19 @@ def _layer_attention(layer, hidden, context, cache, model):
     ctx_keys = _rope(model, ctx_keys, span_positions)
     noise_keys = _rope(model, noise_keys, query_positions)
 
+    previous_keys = cache["keys"]
+    previous_values = cache["values"]
     if ctx_keys.shape[2] > 0:
-        cache["keys"] = ctx_keys.detach() if cache["keys"] is None else torch.cat([cache["keys"], ctx_keys.detach()], dim=2)
-        cache["values"] = ctx_values.detach() if cache["values"] is None else torch.cat([cache["values"], ctx_values.detach()], dim=2)
+        cache["keys"] = (
+            ctx_keys.detach()
+            if previous_keys is None
+            else torch.cat([previous_keys, ctx_keys.detach()], dim=2)
+        )
+        cache["values"] = (
+            ctx_values.detach()
+            if previous_values is None
+            else torch.cat([previous_values, ctx_values.detach()], dim=2)
+        )
         cache["positions"] = (
             span_positions
             if cache["positions"] is None
@@ -133,9 +143,24 @@ def _layer_attention(layer, hidden, context, cache, model):
     cache["offset"] = offset + ctx_len
     _trim(cache)
 
-    keys = torch.cat([cache["keys"], noise_keys], dim=2)
-    values = torch.cat([cache["values"], noise_values], dim=2)
+    context_keys = (
+        ctx_keys
+        if previous_keys is None
+        else torch.cat([previous_keys, ctx_keys], dim=2)
+    )
+    context_values = (
+        ctx_values
+        if previous_values is None
+        else torch.cat([previous_values, ctx_values], dim=2)
+    )
+    keys = torch.cat([context_keys, noise_keys], dim=2)
+    values = torch.cat([context_values, noise_values], dim=2)
     key_positions = torch.cat([cache["positions"], query_positions])
+    if keys.shape[2] != key_positions.numel():
+        raise RuntimeError(
+            f"replay key count {keys.shape[2]} does not match "
+            f"position count {key_positions.numel()}"
+        )
 
     mask = (query_positions[:, None] >= key_positions[None, :]) & (
         query_positions[:, None] < key_positions[None, :] + layer.sliding_window

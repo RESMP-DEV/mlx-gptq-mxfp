@@ -190,3 +190,42 @@ def test_cache_is_reusable_after_no_grad_evaluation():
     hidden = caches.replay(model, payload(), 0, 2)
     hidden.sum().backward()
     assert hidden.shape == (1, 1, 8)
+
+
+def test_current_context_keeps_gradient_into_fc_after_cached_replay():
+    model = _Model()
+    model.fc.weight.requires_grad_(True)
+    order = {0: [0, 1]}
+    caches = PromptCaches(len(model.layers), order)
+
+    def payload():
+        return {
+            "context": torch.randn(1, 3, 8),
+            "raw_context": torch.randn(1, 3, 16),
+            "noise_embedding": torch.randn(1, 2, 8),
+        }
+
+    caches.replay(model, payload(), 0, 0)
+    hidden = caches.replay(model, payload(), 0, 1)
+    hidden.sum().backward()
+
+    assert model.fc.weight.grad is not None
+    assert torch.count_nonzero(model.fc.weight.grad) > 0
+
+
+def test_current_context_keeps_gradient_into_fc_on_fresh_cache():
+    model = _Model()
+    model.fc.weight.requires_grad_(True)
+    order = {0: [0]}
+    caches = PromptCaches(len(model.layers), order)
+
+    item = {
+        "context": torch.randn(1, 3, 8),
+        "raw_context": torch.randn(1, 3, 16),
+        "noise_embedding": torch.randn(1, 2, 8),
+    }
+    hidden = caches.replay(model, item, 0, 0)
+    hidden.sum().backward()
+
+    assert model.fc.weight.grad is not None
+    assert torch.count_nonzero(model.fc.weight.grad) > 0
