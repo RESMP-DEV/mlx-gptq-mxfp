@@ -1,0 +1,203 @@
+"""Selected-row BF16 PLE reads from external safetensors shards.
+
+The PLE table is 320,001,536 rows of 160 BF16 values, split into 128 shards.
+Only the rows a token actually selects are read, so the 95.37 GiB table is never
+resident. MLX cannot build a BF16 array from a numpy buffer, so rows arrive as
+uint16 bit patterns and are reinterpreted through a same-size float32 view.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import mlx.core as mx
+import numpy as np
+
+BF16_VALUES = 160
+BYTES_PER_ROW = BF16_VALUES * 2
+UINT16_PER_ROW = BF16_VALUES
+
+
+class ExternalPleTable:
+    """Read selected rows of the sharded BF16 PLE table from disk."""
+
+    def __init__(
+        self,
+        root: str | os.PathLike,
+        n_shards: int = 128,
+        rows_per_shard: int | None = None,
+        max_inflight: int = 32,
+        cache_rows: int = 0,
+    ):
+        self.root = Path(root)
+        self.n_shards = n_shards
+        self.max_inflight = max(1, int(max_inflight))
+        self.executor = ThreadPoolExecutor(max_workers=self.max_inflight)
+        with open(self.root / "model.safetensors.index.json") as fid:
+            weight_map = json.load(fid)["weight_map"]
+        prefix = None
+        self.shard_file: list[str] = [""] * n_shards
+        self.shard_path: list[Path] = [Path()] * n_shards
+        for key, filename in weight_map.items():
+            if "ngram_embedding.shards." not in key:
+                continue
+            index = int(key.rsplit(".shards.", 1)[1].split(".weight", 1)[0])
+            if prefix is None:
+                prefix = key.split(".ngram_embedding.", 1)[0]
+            self.shard_file[index] = filename
+            self.shard_path[index] = self.root / filename
+        if prefix is None or any(not name for name in self.shard_file):
+            raise ValueError(f"no complete PLE shard index under {self.root}")
+        self.key_prefix = f"{prefix}.ngram_embedding.shards."
+        self.fd: dict[int, int] = {}
+        if rows_per_shard is None:
+            rows_per_shard = os.fstat(self._open(0)).st_size // BYTES_PER_ROW
+        self.rows_per_shard = int(rows_per_shard)
+        self.rows = self.rows_per_shard * self.n_shards
+        self.cache_capacity = int(cache_rows)
+        self.cache: OrderedDict[int, np.ndarray] | None = (
+            OrderedDict() if self.cache_rows_enabled() else None
+        )
+
+    def cache_rows_enabled(self) -> bool:
+        return self.cache_capacity > 0
+
+    def _open(self, shard: int) -> int:
+        fd = self.fd.get(shard)
+        if fd is None:
+            fd = os.open(self.shard_path[shard], os.O_RDONLY)
+            try:
+                os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_RANDOM)
+            except (AttributeError, OSError):
+                pass
+            self.fd[shard] = fd
+        return fd
+
+    def close(self) -> None:
+        for fd in self.fd.values():
+            os.close(fd)
+        self.fd.clear()
+        self.executor.shutdown(wait=True)
+
+    def _cache_get(self, row: int) -> np.ndarray | None:
+        if self.cache is None:
+            return None
+        with self._cache_lock:  # type: ignore[attr-defined]
+            value = self.cache.get(row)
+            if value is not None:
+                self.cache.move_to_end(row)
+            return value
+
+    def _read_rows(self, shard: int, rows: np.ndarray) -> np.ndarray:
+        """Read arbitrary rows of one shard and return raw uint16 patterns."""
+        rows = np.sort(rows)
+        order = np.argsort(rows, kind="stable")
+        fd = self._open(shard)
+        out = np.empty((rows.size, UINT16_PER_ROW), dtype=np.uint16)
+        base = self.rows_per_shard
+        run_start = 0
+        while run_start < rows.size:
+            run_end = run_start + 1
+            while (
+                run_end < rows.size
+                and rows[run_end] == rows[run_end - 1] + 1
+            ):
+                run_end += 1
+            first = int(rows[run_start])
+            count = int(rows[run_end - 1] - first + 1)
+            buf = os.pread(fd, count * BYTES_PER_ROW, (first * base) * 0 + first * BYTES_PER_ROW)
+            if len(buf) != count * BYTES_PER_ROW:
+                raise RuntimeError(f"short PLE read in shard {shard} at row {first}")
+            flat = np.frombuffer(buf, dtype=np.uint16).reshape(count, UINT16_PER_ROW)
+            out[run_start:run_end] = flat
+            run_start = run_end
+        if not np.array_equal(rows, np.sort(rows)):
+            raise AssertionError("rows were not sorted")
+        return out[np.argsort(order, kind="stable")] if False else out
+
+    def gather(self, global_rows: np.ndarray) -> mx.array:
+        """Return the selected rows as an MLX array shaped like global_rows."""
+        flat = np.asarray(global_rows, dtype=np.int64).reshape(-1)
+        if flat.size and (flat.min() < 0 or flat.max() >= self.rows):
+            raise IndexError("PLE row out of range")
+        shard_of = flat // self.rows_per_shard
+        row_of = flat % self.rows_per_shard
+
+        payloads: list[np.ndarray | None] = [None] * flat.size
+        cache_hits = 0
+        by_shard: dict[int, list[int]] = {}
+        for position in range(flat.size):
+            row = int(flat[position])
+            cached = self.cache_get_safe(row)
+            if cached is not None:
+                payloads[position] = cached
+                cache_hits += 1
+                continue
+            by_shard.setdefault(int(shard_of[position]), []).append(position)
+
+        futures = []
+        for shard, positions in by_shard.items():
+            rows = row_of[positions]
+            futures.append(
+                (positions, self.executor.submit(self._read_rows, shard, rows))
+            )
+
+        for positions, future in futures:
+            values = future.result()
+            for slot, position in enumerate(positions):
+                payloads[position] = values[slot]
+                self.cache_put_safe(int(flat[position]), values[slot])
+
+        out = np.empty((flat.size, UINT16_PER_ROW), dtype=np.uint16)
+        for position, value in enumerate(payloads):
+            if value is None:
+                raise RuntimeError(f"PLE row {flat[position]} was never read")
+            out[position] = value
+
+        bits = mx.array(out.reshape(-1))
+        values = bits.view(mx.bfloat16)
+        mx.eval(values)
+        return values.reshape(*global_rows.shape, BF16_VALUES)
+
+    def cache_get_safe(self, row: int) -> np.ndarray | None:
+        if self.cache is None:
+            return None
+        import threading
+
+        lock = getattr(self, "_cache_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._cache_lock = lock  # type: ignore[attr-defined]
+        with lock:
+            value = self.cache.get(row)
+            if value is not None:
+                self.cache.move_to_end(row)
+            return value
+
+    def cache_put_safe(self, row: int, value: np.ndarray) -> None:
+        if self.cache is None:
+            return
+        import threading
+
+        lock = getattr(self, "_cache_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._cache_lock = lock  # type: ignore[attr-defined]
+        with lock:
+            self.cache[row] = value
+            self.cache.move_to_end(row)
+            while len(self.cache) > self.cache_capacity:
+                self.cache.popitem(last=False)
+
+    def stats(self) -> dict:
+        return {
+            "rows": self.rows,
+            "rows_per_shard": self.rows_per_shard,
+            "n_shards": self.n_shards,
+            "cache_rows": self.cache_capacity,
+            "cache_size": len(self.cache) if self.cache is not None else 0,
+        }

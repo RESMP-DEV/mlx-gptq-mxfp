@@ -1,0 +1,18 @@
+diff --git a/mlx/backend/metal/kernels/fp4.h b/mlx/backend/metal/kernels/fp4.h
+index af4cbb02c..15b6368b7 100644
+--- a/mlx/backend/metal/kernels/fp4.h
++++ b/mlx/backend/metal/kernels/fp4.h
+@@ -40,7 +40,12 @@ struct fp4_e2m1 {
+   }
+
+   operator float() thread {
+-    return static_cast<float>(this->operator float16_t());
++    uint32_t exponent = 126u + ((bits & 7) >> 1);
++    uint32_t significand =
++        select(0u, uint32_t(bits & 1) << 22, (bits & 7) > 1u);
++    uint32_t value = (exponent << 23) | significand;
++    uint32_t result = select(0u, value, (bits & 7) != 0u);
++    return as_type<float>(result | (uint32_t(bits & 8) << 28));
+   }
+
+   operator bfloat16_t() thread {

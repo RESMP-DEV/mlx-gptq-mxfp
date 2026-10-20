@@ -1,0 +1,162 @@
+diff --git a/mlx/backend/metal/kernels/fp_quantized.h b/mlx/backend/metal/kernels/fp_quantized.h
+index 6ddafa7c7..04a67cc9c 100644
+--- a/mlx/backend/metal/kernels/fp_quantized.h
++++ b/mlx/backend/metal/kernels/fp_quantized.h
+@@ -336,7 +336,8 @@ template <
+     int bits,
+     bool partial_rows = false,
+     bool has_global_scale = false,
+-    int results_per_simdgroup = 4>
++    int results_per_simdgroup = 4,
++    int packs_per_thread = 2>
+ METAL_FUNC void fp_qmv_fast_impl(
+     const device uint32_t* w,
+     const device uint8_t* scales,
+@@ -348,7 +349,6 @@ METAL_FUNC void fp_qmv_fast_impl(
+     uint3 tid [[threadgroup_position_in_grid]],
+     uint simd_gid [[simdgroup_index_in_threadgroup]],
+     uint simd_lid [[thread_index_in_simdgroup]]) {
+-  constexpr int packs_per_thread = 2;
+   constexpr int num_simdgroups = 2;
+   constexpr int pack_factor = get_pack_factor<32, bits>();
+   constexpr int bytes_per_pack = get_bytes_per_pack<32>();
+@@ -805,6 +805,59 @@ METAL_FUNC void fp_qvm_impl(
+   }
+ }
+
++template <
++    typename T,
++    int group_size,
++    int bits,
++    bool batched,
++    bool partial_rows = false,
++    bool has_global_scale = false,
++    int results_per_simdgroup = 4>
++[[kernel]] void fp_qmv_fast_p1(
++    const device uint32_t* w,
++    const device uint8_t* scales,
++    const device float* global_scale,
++    const device T* x,
++    device T* y,
++    const constant int& in_vec_size,
++    const constant int& out_vec_size,
++    const constant int& x_batch_ndims,
++    const constant int* x_shape,
++    const constant int64_t* x_strides,
++    const constant int& w_batch_ndims,
++    const constant int* w_shape,
++    const constant int64_t* w_strides,
++    const constant int64_t* s_strides,
++    uint3 tid [[threadgroup_position_in_grid]],
++    uint simd_gid [[simdgroup_index_in_threadgroup]],
++    uint simd_lid [[thread_index_in_simdgroup]]) {
++  (void)x_batch_ndims;
++  (void)x_shape;
++  (void)x_strides;
++  (void)w_batch_ndims;
++  (void)w_shape;
++  (void)w_strides;
++  (void)s_strides;
++  fp_qmv_fast_impl<
++      T,
++      group_size,
++      bits,
++      partial_rows,
++      has_global_scale,
++      results_per_simdgroup,
++      1>(
++      w,
++      scales,
++      global_scale,
++      x,
++      y,
++      in_vec_size,
++      out_vec_size,
++      tid,
++      simd_gid,
++      simd_lid);
++}
++
+ template <
+     typename T,
+     const int group_size,
+diff --git a/mlx/backend/metal/kernels/fp_quantized.metal b/mlx/backend/metal/kernels/fp_quantized.metal
+index ffd8b5b9c..51db76919 100644
+--- a/mlx/backend/metal/kernels/fp_quantized.metal
++++ b/mlx/backend/metal/kernels/fp_quantized.metal
+@@ -256,5 +256,11 @@
+ instantiate_quantized_types(float)
+ instantiate_quantized_types(bfloat16_t)
+ instantiate_quantized_types(float16_t)
++instantiate_quantized_qmv(mxfp4, qmv_fast_p1, float, 32, 4, 0, 0, 0, 4)
++instantiate_quantized_qmv(mxfp4, qmv_fast_p1, bfloat16_t, 32, 4, 0, 0, 0, 4)
++instantiate_quantized_qmv(mxfp4, qmv_fast_p1, float16_t, 32, 4, 0, 0, 0, 4)
++instantiate_quantized_qmv(mxfp4, qmv_fast, float, 32, 4, 0, 0, 0, 2)
++instantiate_quantized_qmv(mxfp4, qmv_fast, bfloat16_t, 32, 4, 0, 0, 0, 2)
++instantiate_quantized_qmv(mxfp4, qmv_fast, float16_t, 32, 4, 0, 0, 0, 2)
+ instantiate_quantized_qmm_hgs(bfloat16_t)
+     // clang-format on
+diff --git a/mlx/backend/metal/quantized.cpp b/mlx/backend/metal/quantized.cpp
+index 946125894..17cea290b 100644
+--- a/mlx/backend/metal/quantized.cpp
++++ b/mlx/backend/metal/quantized.cpp
+@@ -14,6 +14,9 @@
+ #include "mlx/primitives.h"
+ #include "mlx/utils.h"
+
++#include <cstdlib>
++#include <iostream>
++
+ namespace mlx::core {
+
+ namespace {
+@@ -492,13 +495,15 @@ void qmv(
+   bool use_narrow_qmv = fast && N >= 4096 && d.get_architecture_gen() == 17 &&
+       d.get_architecture().back() == 's' && mode == "nvfp4";
+   int results_per_simdgroup = use_narrow_qmv ? 2 : 4;
++  bool use_p1_reads = fast && mode == "mxfp4" && M == 1 && B == 1 &&
++      K == 2560 && N >= 12288 && !partial_rows && !global_scale;
+   bn = 2 * results_per_simdgroup;
+   MTL::Size group_dims(bk, 2, 1);
+   MTL::Size grid_dims(M, (N + bn - 1) / bn, B);
+
+   concatenate(
+       kname,
+-      mode + (fast ? "_qmv_fast_" : "_qmv_"),
++      mode + (use_p1_reads ? "_qmv_fast_p1_" : (fast ? "_qmv_fast_" : "_qmv_")),
+       type_string,
+       "_gs_",
+       group_size,
+@@ -512,7 +517,7 @@ void qmv(
+   auto kernel = get_quantized_kernel_wrapped(
+       d,
+       kname,
+-      (fast ? "qmv_fast" : "qmv"),
++      (use_p1_reads ? "qmv_fast_p1" : (fast ? "qmv_fast" : "qmv")),
+       mode,
+       type_string,
+       group_size,
+@@ -1873,6 +1878,23 @@ void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
+   auto& s = stream();
+   auto& d = metal::device(s.device);
+
++  if (std::getenv("MLX_LOG_QUANTIZED_MATMUL")) {
++    std::cerr << "QM shape=[";
++    for (auto dim : inputs[0].shape()) {
++      std::cerr << dim << ",";
++    }
++    std::cerr << "] strides=[";
++    for (auto stride : inputs[0].strides()) {
++      std::cerr << stride << ",";
++    }
++    std::cerr << "] row=" << inputs[0].flags().row_contiguous
++              << " contiguous=" << inputs[0].flags().contiguous << " out=[";
++    for (auto dim : out.shape()) {
++      std::cerr << dim << ",";
++    }
++    std::cerr << "]\n";
++  }
++
+   out.set_data(allocator::malloc(out.nbytes()));
+
+   // Make sure the last two dims of x and w, s, b are contiguous. This should
