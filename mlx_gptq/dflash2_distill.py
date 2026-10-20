@@ -19,7 +19,6 @@ from .dflash2_calibrate import _cycle_paths, _load_reference
 from .dflash2_replay import (
     PromptCaches,
     _prompt_order,
-    draft_context_for,
     replay_fidelity,
 )
 from .qat import fake_quantize_mxfp4
@@ -110,6 +109,46 @@ def _prompt_split(
     if not train or not validation:
         raise ValueError("prompt split produced an empty side")
     return train, validation, validation_prompts
+
+
+def _datasets(
+    args: argparse.Namespace,
+) -> tuple[
+    CycleDataset, CycleDataset, list[int], list[int], set[int], float | None
+]:
+    """Load train and validation captures without crossing prompt groups."""
+    train = CycleDataset(
+        Path(args.capture_dir), args.limit, args.stratified_limit, args.seed
+    )
+    if not train:
+        raise RuntimeError("empty training capture")
+    if args.validation_capture_dir:
+        if args.validation_fraction is not None:
+            raise ValueError(
+                "use either --validation-capture-dir or --validation-fraction"
+            )
+        validation = CycleDataset(Path(args.validation_capture_dir))
+        if not validation:
+            raise RuntimeError("empty validation capture")
+        train_prompts = set(train.prompt_ids)
+        validation_prompts = set(validation.prompt_ids)
+        if not train_prompts.isdisjoint(validation_prompts):
+            overlap = sorted(train_prompts & validation_prompts)
+            raise ValueError(f"validation capture leaks prompt indices: {overlap[:8]}")
+        return (
+            train,
+            validation,
+            list(range(len(train))),
+            list(range(len(validation))),
+            validation_prompts,
+            None,
+        )
+
+    fraction = 0.05 if args.validation_fraction is None else args.validation_fraction
+    train_ids, validation_ids, validation_prompts = _prompt_split(
+        train.prompt_ids, fraction, args.seed
+    )
+    return train, train, train_ids, validation_ids, validation_prompts, fraction
 
 
 class LoRALinear(torch.nn.Module):
@@ -559,6 +598,11 @@ def _training_fingerprint(args: argparse.Namespace) -> dict[str, object]:
     return {
         "model_sha256": _sha256(model_file),
         "capture_index_sha256": _sha256(Path(args.capture_dir) / "index.json"),
+        "validation_capture_index_sha256": (
+            _sha256(Path(args.validation_capture_dir) / "index.json")
+            if args.validation_capture_dir
+            else None
+        ),
         "mode": args.mode,
         "lora_rank": args.lora_rank,
         "lora_alpha": args.lora_alpha,
@@ -622,14 +666,14 @@ def run(args):
                 f"{tuple(projection.shape)}"
             )
         projection.data.copy_(initial.to(device).float())
-    dataset = CycleDataset(
-        Path(args.capture_dir), args.limit, args.stratified_limit, args.seed
-    )
-    if not dataset:
-        raise RuntimeError("empty capture")
-    ids, validation_ids, validation_prompts = _prompt_split(
-        dataset.prompt_ids, args.validation_fraction, args.seed
-    )
+    (
+        dataset,
+        validation_dataset,
+        ids,
+        validation_ids,
+        validation_prompts,
+        validation_fraction,
+    ) = _datasets(args)
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     wandb_run = _start_wandb(args, output)
@@ -673,18 +717,24 @@ def run(args):
     caches = None
     fidelity = None
     if not use_captured_hidden:
-        caches = PromptCaches(len(model.layers), _prompt_order(dataset))
+        prompt_order = _prompt_order(dataset)
+        if validation_dataset is not dataset:
+            prompt_order.update(_prompt_order(validation_dataset))
+        caches = PromptCaches(len(model.layers), prompt_order)
         fidelity, fidelity_cycles = replay_fidelity(
             model, dataset, device, limit=args.fidelity_cycles,
             threshold=args.fidelity_threshold,
         )
         print(
-            {"replay_fidelity_cosine": fidelity, "replay_fidelity_cycles": fidelity_cycles},
+            {
+                "replay_fidelity_cosine": fidelity,
+                "replay_fidelity_cycles": fidelity_cycles,
+            },
             flush=True,
         )
     started = time.time()
     initial_metrics = _evaluate_cycles(
-        dataset,
+        validation_dataset,
         validation_ids,
         model,
         device,
@@ -761,7 +811,7 @@ def run(args):
                 print(json.dumps(history[-1]), flush=True)
 
         validation_metrics = _evaluate_cycles(
-            dataset,
+            validation_dataset,
             validation_ids,
             model,
             device,
@@ -842,6 +892,8 @@ def run(args):
         "stratified_limit": args.stratified_limit,
         "validation_cycles": len(validation_ids),
         "validation_prompts": sorted(validation_prompts),
+        "validation_capture_dir": args.validation_capture_dir,
+        "validation_fraction": validation_fraction,
         "epochs": args.epochs,
         "best_validation": best,
         "best_validation_metrics": best_metrics,
@@ -909,6 +961,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
     parser.add_argument("--capture-dir", required=True)
+    parser.add_argument(
+        "--validation-capture-dir",
+        help="session-disjoint validation capture; overrides --validation-fraction",
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--dflash-package", default="/home/kearm/dflash-pytorch")
     parser.add_argument("--initial-projection")
@@ -923,7 +979,7 @@ def main():
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
-    parser.add_argument("--validation-fraction", type=float, default=0.05)
+    parser.add_argument("--validation-fraction", type=float)
     parser.add_argument(
         "--selection-metric",
         choices=("auto", "ce", "prefix", "loss"),

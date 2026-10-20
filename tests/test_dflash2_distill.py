@@ -1,19 +1,21 @@
+import argparse
+
 import pytest
 import torch
+from mlx_gptq import dflash2_distill
 from mlx_gptq.dflash2_distill import (
     LoRALinear,
-    _use_captured_hidden,
     _cycle_loss,
     _distribution_loss,
     _evaluate_cycles,
     _flat_metrics,
-    _forward,
     _install_lora,
     _merge_lora,
     _prompt_split,
     _remove_lora,
     _selector_loss,
     _stratified_indices,
+    _use_captured_hidden,
 )
 from mlx_gptq.grid import rtn_quantize_mxfp
 from mlx_gptq.qat import fake_quantize_mxfp4
@@ -341,6 +343,45 @@ def test_prompt_split_never_leaks_a_prompt():
     assert train_prompts.isdisjoint(validation_prompts)
     assert set(validation_prompts) == {prompt_ids[index] for index in validation}
     assert len(train) + len(validation) == len(prompt_ids)
+
+
+def test_external_validation_capture_must_be_prompt_disjoint(monkeypatch):
+    class Dataset:
+        ids_by_root = {"train": [0], "validation": [1]}
+
+        def __init__(self, root, limit=0, stratified=False, seed=0):
+            self.root = str(root)
+            self.prompt_ids = list(self.ids_by_root[self.root])
+
+        def __len__(self):
+            return len(self.prompt_ids)
+
+    monkeypatch.setattr(dflash2_distill, "CycleDataset", Dataset)
+    args = argparse.Namespace(
+        capture_dir="train",
+        validation_capture_dir="validation",
+        validation_fraction=None,
+        limit=0,
+        stratified_limit=False,
+        seed=17,
+    )
+
+    split = dflash2_distill._datasets(args)
+    train, validation, ids, validation_ids, prompts, fraction = split
+
+    assert train is not validation
+    assert ids == [0]
+    assert validation_ids == [0]
+    assert prompts == {1}
+    assert fraction is None
+
+    args.validation_fraction = 0.2
+    with pytest.raises(ValueError, match="either"):
+        dflash2_distill._datasets(args)
+    args.validation_fraction = None
+    Dataset.ids_by_root["validation"] = [0]
+    with pytest.raises(ValueError, match="leaks"):
+        dflash2_distill._datasets(args)
 
 
 def test_merge_and_remove_lora_exports_original_keys():
