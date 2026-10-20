@@ -3,17 +3,15 @@
 import numpy as np
 import pytest
 import torch
-
+from mlx_gptq.artifacts import pack_nibbles, unpack_nibbles
 from mlx_gptq.grid import rtn_quantize, rtn_quantize_mxfp
 from mlx_gptq.packing import pack_q, unpack_q
-from mlx_gptq.artifacts import pack_nibbles, unpack_nibbles
-
-mx = pytest.importorskip("mlx.core")
 
 
 @pytest.mark.parametrize("bits", [2, 4, 8])
 @pytest.mark.parametrize("group_size", [32, 64])
 def test_pack_matches_mx_dequantize(bits, group_size):
+    mx = pytest.importorskip("mlx.core")
     rng = np.random.default_rng(0)
     R, C = 8, 256
     q = rng.integers(0, 2**bits, (R, C)).astype(np.uint8)
@@ -33,6 +31,7 @@ def test_pack_matches_mx_dequantize(bits, group_size):
 @pytest.mark.parametrize("bits", [4, 8])
 def test_rtn_grid_roundtrips_through_mlx(bits):
     """Weights RTN'd by our torch grid must reload exactly via mx.dequantize."""
+    mx = pytest.importorskip("mlx.core")
     torch.manual_seed(0)
     W = torch.randn(16, 128)
     q, s, b, W_dq = rtn_quantize(W.float(), bits, 64, method="mse",
@@ -59,7 +58,22 @@ def test_nibble_roundtrip():
     assert torch.equal(unpack_nibbles(pack_nibbles(q)), q)
 
 
+def test_harness_e2m1_layout_matches_mlx_packer():
+    from tools.mxfp4_kernel.e2m1_packing import (
+        pack_e2m1,
+        pack_e2m1_bytes,
+        unpack_e2m1,
+    )
+
+    q = torch.randint(0, 16, (5, 64), dtype=torch.uint8)
+    words = pack_e2m1(q)
+    np.testing.assert_array_equal(words.numpy(), pack_q(q.numpy(), 4))
+    assert torch.equal(unpack_e2m1(words, q.shape[1]), q)
+    assert torch.equal(pack_e2m1_bytes(q), pack_nibbles(q))
+
+
 def test_stacked_3d_packing():
+    mx = pytest.importorskip("mlx.core")
     rng = np.random.default_rng(2)
     q = rng.integers(0, 16, (3, 8, 64)).astype(np.uint8)  # [E, out, in]
     s = rng.random((3, 8, 1)).astype(np.float32) + 0.5
@@ -74,6 +88,7 @@ def test_stacked_3d_packing():
 @pytest.mark.parametrize("mode,bits", [("mxfp4", 4), ("mxfp8", 8)])
 def test_mxfp_rtn_matches_mlx(mode, bits):
     """Torch emits the exact native MLX MXFP codes and E8M0 scales."""
+    mx = pytest.importorskip("mlx.core")
     torch.manual_seed(23)
     weight = torch.randn(17, 96) * torch.linspace(0.01, 8.0, 17).unsqueeze(1)
     q, scales, biases, dq = rtn_quantize_mxfp(weight, mode)

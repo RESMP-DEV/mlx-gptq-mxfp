@@ -119,9 +119,26 @@ records the calibration shape, selected scale exponents, module count, and
 weight hashes. `mlx_gptq.mix` can compose matched BF16/MXFP4/MXFP8 module-level
 controls without dequantizing or requantizing either source.
 
+## SM120 research harness
+
+`tools/mxfp4_kernel` contains the separate Blackwell research harness used to
+qualify native MXFP4 preparation and GEMMs for DFlash2 shapes. It does not
+change the standard MLX artifact consumed by `mlx-lm`.
+
+```bash
+python tools/mxfp4_kernel/activation_quantizer_bench.py --output results.json
+python tools/mxfp4_kernel/weight_repack_bench.py --output weights.json
+python tools/mxfp4_kernel/mxfp4_matmul.py --rows 128 --output matmul.json
+```
+
+The live Tetra receipt is
+`evidence/2026-10-20-tetra-fused-mxfp4-activation-weight-packing.md`.
+
 ## Validated
 
 - Bit-exact grid/packing vs `mlx.core` (2/4/8-bit, incl. stacked expert tensors).
+- Tetra SM120 MXFP4 preparation: byte-equal activation and weight operands,
+  native `mxf4nvf4` PTX, and no BF16 or FP8 MMA fallback.
 - Qwen3-0.6B end-to-end: wikitext PPL **24.60 (GPTQ) vs 25.71 (RTN)** at 4-bit
   g64 with only 16×512 calibration tokens.
 - Tiny Qwen3-MoE end-to-end: per-expert routed-token capture (token counts
