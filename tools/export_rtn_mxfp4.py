@@ -10,7 +10,7 @@ from pathlib import Path
 
 import torch
 from mlx_gptq.artifacts import ArtifactWriter
-from mlx_gptq.grid import MX_GROUP_SIZE, rtn_quantize_mxfp
+from mlx_gptq.grid import MX_GROUP_SIZE, dequantize_mxfp, rtn_quantize_mxfp
 from safetensors.torch import load_file
 
 _LAYER_SUFFIXES = frozenset(
@@ -81,7 +81,8 @@ def export(args: argparse.Namespace) -> dict[str, object]:
     tensors = {}
     metadata = {}
     for name in names:
-        weight = weights[f"{name}.weight"].float()
+        stored_weight = weights[f"{name}.weight"]
+        weight = stored_weight.float()
         if weight.shape[-1] % MX_GROUP_SIZE:
             raise ValueError(f"{name} input width is not divisible by 32")
         if qat_parameters is None:
@@ -103,6 +104,9 @@ def export(args: argparse.Namespace) -> dict[str, object]:
                 raise RuntimeError(f"{name} QAT codes have the wrong layout")
             if tuple(scales.shape) != expected_scales or scales.dtype != torch.uint8:
                 raise RuntimeError(f"{name} QAT scales have the wrong layout")
+            effective = dequantize_mxfp(q, scales, "mxfp4").reshape(weight.shape)
+            if not torch.equal(stored_weight, effective.to(stored_weight.dtype)):
+                raise RuntimeError(f"{name} does not match its prescribed QAT grid")
         tensors[name] = (q, scales, None)
         metadata[name] = {
             "bits": 4,

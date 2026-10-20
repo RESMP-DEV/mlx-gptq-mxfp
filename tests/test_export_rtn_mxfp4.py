@@ -85,3 +85,30 @@ def test_qat_export_rejects_missing_prescribed_grid(tmp_path):
                 model=model, output=tmp_path / "out", qat_source=True
             )
         )
+
+
+def test_qat_export_rejects_blended_checkpoint_with_stale_grid(tmp_path):
+    torch.manual_seed(4)
+    model = tmp_path / "model"
+    model.mkdir()
+    raw = torch.randn(8, 64)
+    grouped = raw.reshape(8, 2, 32)
+    scale_bytes, scales = choose_mxfp_scale(grouped, "mxfp4")
+    codes, effective = quantize_mxfp_with_scale(grouped, scales, "mxfp4")
+    effective = effective.reshape(raw.shape).clone()
+    effective[0, 0] += 0.125
+    save_file({"fc.weight": effective}, str(model / "model.safetensors"))
+    save_file(
+        {
+            "fc.q": codes.reshape(raw.shape),
+            "fc.scales": scale_bytes.reshape(8, 2),
+        },
+        str(model / "qat_mxfp4.safetensors"),
+    )
+
+    with pytest.raises(RuntimeError, match="prescribed QAT grid"):
+        export(
+            argparse.Namespace(
+                model=model, output=tmp_path / "out", qat_source=True
+            )
+        )

@@ -16,6 +16,9 @@ It stores the exact uint8 E2M1 codes and uint8 E8M0 scale bytes chosen for the
 QAT-effective selector projection and every QAT LoRA target. The exporter's
 `--qat-source` path consumes those tensors, validates layout and dtype, and
 fails if metadata is absent. The non-QAT path remains ordinary RTN.
+The exporter also dequantizes every prescribed pair and requires exact equality
+with the checkpoint tensor. A blended checkpoint therefore fails rather than
+packing the unblended run's stale codes and scales.
 
 ## Boundary check
 
@@ -43,8 +46,11 @@ uvx ruff check \
 exit 0
 
 .venv/bin/python -m pytest tests/ -q
-59 passed, 5 skipped
+66 passed, 5 skipped
 ```
+
+The later count includes the run validator; the focused exporter test has four
+passing cases, including rejection of a stale grid after blending.
 
 ## Non-claims
 
