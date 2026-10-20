@@ -47,6 +47,11 @@ provenance and non-claims is not accepted.
   CCR OpenAI route: 142 aggregate tok/s at 32 short-context requests, but only
   about two useful concurrent 8k prefills. Receipt:
   `evidence/2026-10-20-local-27b-ccr-fallback-capacity.md`.
+- Consolidated four bounded EAGLE-4 audits into the correctness-first Qwen
+  speculative-decoding plan. The pinned draft, official inference source,
+  paper, target-vocabulary contract, low-rank/full-head behavior, and Qwen GDN
+  verification constraint are recorded in
+  `evidence/2026-10-20-eagle4-qwen38-27b-mlx-port-research.md`.
 
 ## Contracts to preserve
 
