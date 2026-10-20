@@ -144,6 +144,11 @@ def main(argv=None):
         help="regex of layer-relative module names to leave unquantized",
     )
     ap.add_argument(
+        "--lazy-ple",
+        action="store_true",
+        help="read PLE embedding rows from source shards instead of materializing them",
+    )
+    ap.add_argument(
         "--override",
         action="append",
         metavar="REGEX=BITS",

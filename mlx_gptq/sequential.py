@@ -75,6 +75,9 @@ class RawShardIndex:
     def get(self, name: str) -> torch.Tensor:
         return self._file(self.weight_map[name]).get_tensor(name)
 
+    def get_rows(self, name: str, rows: list[int]) -> torch.Tensor:
+        return self._file(self.weight_map[name]).get_slice(name)[rows]
+
     def names_with_prefix(self, prefix: str):
         return [n for n in self.weight_map if n.startswith(prefix)]
 
@@ -137,6 +140,84 @@ def materialize_module(
 def free_module(module: torch.nn.Module):
     """Release a layer's weights by putting it back on meta."""
     module.to_empty(device="meta")
+
+
+class LazyShardedEmbedding(torch.nn.Module):
+    """Embedding backed by sharded safetensors with selected-row reads."""
+
+    def __init__(
+        self,
+        prefix: str,
+        shards: RawShardIndex,
+        n_shards: int,
+        rows_per_shard: int,
+        dim: int,
+        device,
+        dtype,
+    ):
+        super().__init__()
+        self.prefix = prefix
+        self.shards = shards
+        self.n_shards = n_shards
+        self.rows_per_shard = rows_per_shard
+        self.dim = dim
+        self.device = device
+        self.dtype = dtype
+        # Transformers checks this device before calling the embedding.
+        self.weight = torch.empty(0, device=device, dtype=dtype)
+
+    def forward(self, ids: torch.Tensor) -> torch.Tensor:
+        shape = ids.shape
+        flat = ids.detach().reshape(-1).to("cpu", torch.long)
+        shard_of = flat // self.rows_per_shard
+        out = torch.empty(
+            (flat.numel(), self.dim), device=self.device, dtype=self.dtype
+        )
+
+        for shard in range(self.n_shards):
+            selected = shard_of == shard
+            if not bool(selected.any()):
+                continue
+            rows = (flat[selected] % self.rows_per_shard).tolist()
+            name = f"{self.prefix}.shard_{shard}.weight"
+            out[selected] = self.shards.get_rows(name, rows).to(
+                device=self.device, dtype=self.dtype
+            )
+
+        return out.reshape(*shape, self.dim)
+
+
+def install_lazy_ple(
+    module: torch.nn.Module, prefix: str, shards: RawShardIndex, device, dtype
+):
+    """Replace the fused PLE embedding with selected-row shard reads."""
+    for name, child in list(module.named_modules()):
+        if not name.endswith("ple.ple_embedding.ngram_embedding"):
+            continue
+        parent_name, attr = name.rsplit(".", 1)
+        parent = module.get_submodule(parent_name)
+        total_rows, dim = child.weight.shape
+        shard_names = shards.names_with_prefix(f"{prefix}.{name}.shard_")
+        if not shard_names:
+            raise KeyError(f"no PLE shards found for {prefix}.{name}")
+        n_shards = len(shard_names)
+        if total_rows % n_shards:
+            raise ValueError(
+                f"PLE rows {total_rows} are not divisible by {n_shards} shards"
+            )
+        setattr(
+            parent,
+            attr,
+            LazyShardedEmbedding(
+                f"{prefix}.{name}",
+                shards,
+                n_shards,
+                total_rows // n_shards,
+                dim,
+                device,
+                dtype,
+            ),
+        )
 
 
 # --------------------------------------------------------------------------
@@ -224,6 +305,10 @@ class Pipeline:
         inner = model
         for attr in args.layers_attr.split(".")[:-1]:
             inner = getattr(inner, attr)
+        for module in model.modules():
+            for name, buffer in module.named_buffers(recurse=False):
+                if buffer is not None and not buffer.is_meta:
+                    setattr(module, name, buffer.to(self.dev0))
         self.inner = inner
         self.layers = getattr(inner, args.layers_attr.split(".")[-1])
         self.runtime_model_prefix = args.layers_attr.split(".", 1)[0]
@@ -514,6 +599,8 @@ class Pipeline:
             layer = self.layers[L]
             prefix = self.checkpoint_layers_prefix_fmt.format(L)
             t0 = time.time()
+            if getattr(self.args, "lazy_ple", False):
+                install_lazy_ple(layer, prefix, self.shards, self.dev0, self.dtype)
             materialize_module(layer, prefix, self.shards, self.dev0, self.dtype)
 
             if writer.layer_done(L):
