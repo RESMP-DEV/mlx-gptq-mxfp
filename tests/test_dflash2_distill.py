@@ -2,6 +2,7 @@ import pytest
 import torch
 from mlx_gptq.dflash2_distill import (
     LoRALinear,
+    _use_captured_hidden,
     _cycle_loss,
     _distribution_loss,
     _evaluate_cycles,
@@ -456,3 +457,57 @@ def test_merge_and_remove_lora_exports_original_keys():
 
     assert set(model.state_dict()) == expected_keys
     assert isinstance(model.fc, torch.nn.Linear)
+
+
+def test_captured_hidden_reuse_is_disabled_by_replay_draft():
+    assert _use_captured_hidden("selector", False) is True
+    assert _use_captured_hidden("selector", True) is False
+    assert _use_captured_hidden("distribution", False) is False
+    assert _use_captured_hidden("hybrid", False) is False
+
+
+def test_selector_loss_gradient_reaches_draft_lora_only_with_replay():
+    """The captured hidden shortcut must not silently disable adapter training."""
+
+    class Rotary:
+        def __call__(self, noise, position_ids):
+            return torch.zeros_like(noise), torch.zeros_like(noise)
+
+    class Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.attn = torch.nn.Linear(4, 4, bias=False)
+
+        def forward(self, hidden_states, target_hidden, **_):
+            return hidden_states + self.attn(target_hidden)
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc = torch.nn.Linear(8, 4, bias=False)
+            self.hidden_norm = torch.nn.LayerNorm(4)
+            self.rotary_emb = Rotary()
+            self.layers = torch.nn.ModuleList([Layer()])
+            self.norm = torch.nn.Identity()
+
+    payload = {
+        "selector_hidden": torch.randn(1, 1, 4),
+        "context": torch.randn(1, 2, 4),
+        "raw_context": torch.randn(1, 2, 8),
+        "noise_embedding": torch.randn(1, 2, 4),
+    }
+
+    shortcut = Model()
+    _install_lora(shortcut, rank=2, alpha=4.0)
+    hidden = _forward(shortcut, payload, "cpu", use_selector_hidden=True)
+    assert not hidden.requires_grad
+    assert shortcut.fc.a.grad is None
+    assert shortcut.layers[0].attn.a.grad is None
+
+    replayed = Model()
+    _install_lora(replayed, rank=2, alpha=4.0)
+    hidden = _forward(replayed, payload, "cpu", use_selector_hidden=False)
+    hidden.sum().backward()
+    assert replayed.fc.a.grad is not None
+    assert replayed.fc.b.grad is not None
+    assert replayed.layers[0].attn.a.grad is not None

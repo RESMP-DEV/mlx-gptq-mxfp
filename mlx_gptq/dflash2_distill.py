@@ -139,6 +139,17 @@ class LoRALinear(torch.nn.Module):
         )
 
 
+def _use_captured_hidden(loss_mode: str, replay_draft: bool) -> bool:
+    """Decide whether the captured selector hidden state may be reused.
+
+    The captured hidden state is the draft transformer's own output at
+    capture time. Replaying it is faithful for a selector-only fine-tune but
+    severs the gradient to the draft weights, so a full-head run must replay
+    the draft instead.
+    """
+    return loss_mode == "selector" and not replay_draft
+
+
 def _forward(model, payload, device, *, use_selector_hidden: bool = True):
     if use_selector_hidden and "selector_hidden" in payload:
         return payload["selector_hidden"].to(device)
@@ -407,6 +418,7 @@ def _evaluate_cycles(
     selector_weight: float = 1.0,
     ce_weight: float = 1.0,
     tv_weight: float = 1.0,
+    use_captured_hidden: bool = True,
 ) -> dict[str, float | dict[str, float]]:
     totals: dict[str, float] = {}
     count = 0
@@ -423,7 +435,7 @@ def _evaluate_cycles(
                 model,
                 payload,
                 device,
-                use_selector_hidden=loss_mode == "selector",
+                use_selector_hidden=use_captured_hidden,
             )
             _loss, metrics = _cycle_loss(
                 model,
@@ -524,6 +536,8 @@ def _training_fingerprint(args: argparse.Namespace) -> dict[str, object]:
         "lora_rank": args.lora_rank,
         "lora_alpha": args.lora_alpha,
         "loss_mode": args.loss_mode,
+        "replay_draft": args.replay_draft,
+        "qat_mxfp4": args.qat_mxfp4,
         "loss_reduction": args.loss_reduction,
         "selector_weight": args.selector_weight,
         "distribution_ce_weight": args.distribution_ce_weight,
@@ -627,6 +641,7 @@ def run(args):
         if checkpoint.get("fingerprint") != fingerprint:
             raise RuntimeError("checkpoint training fingerprint does not match")
         print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
+    use_captured_hidden = _use_captured_hidden(args.loss_mode, args.replay_draft)
     started = time.time()
     initial_metrics = _evaluate_cycles(
         dataset,
@@ -665,7 +680,7 @@ def run(args):
                     model,
                     payload,
                     device,
-                    use_selector_hidden=args.loss_mode == "selector",
+                    use_selector_hidden=use_captured_hidden,
                 )
                 loss, _train_metrics = _cycle_loss(
                     model,
@@ -794,6 +809,7 @@ def run(args):
         "distribution_tv_weight": args.distribution_tv_weight,
         "triton_dynamic_conv": args.triton_dynamic_conv,
         "qat_mxfp4": args.qat_mxfp4,
+        "replay_draft": args.replay_draft,
         "steps": step,
         "elapsed_seconds": time.time() - started,
         "device": device,
@@ -880,6 +896,11 @@ def main():
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--triton-dynamic-conv", action="store_true")
     parser.add_argument("--qat-mxfp4", action="store_true")
+    parser.add_argument(
+        "--replay-draft",
+        action="store_true",
+        help="Replay the draft transformer so LoRA adapters receive gradients",
+    )
     parser.add_argument("--log-every", type=int, default=32)
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "offline"), default="disabled"
