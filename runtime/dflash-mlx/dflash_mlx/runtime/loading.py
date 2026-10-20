@@ -159,9 +159,31 @@ def _draft_lm_head_weight_names(model_path: Path) -> list[str]:
     return sorted(names)
 
 
+def _draft_config(model_path: Path) -> dict[str, Any]:
+    config_path = model_path / "config.json"
+    try:
+        payload = json.loads(config_path.read_text())
+    except FileNotFoundError as exc:
+        raise ValueError(f"Draft config is missing: {config_path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid draft config JSON: {config_path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid draft config payload: {config_path}")
+    return payload
+
+
 def _raise_if_unsupported_draft_lm_head(model_path: Path, model_ref: str) -> None:
     lm_head_names = _draft_lm_head_weight_names(model_path)
     if not lm_head_names:
+        return
+    from dflash_mlx.draft.eagle4 import has_eagle4_architecture
+
+    if has_eagle4_architecture(_draft_config(model_path)):
+        if lm_head_names != ["lm_head.weight"]:
+            raise ValueError(
+                f"EAGLE-4 draft checkpoint '{model_ref}' must contain exactly "
+                "lm_head.weight; other lm_head tensors are unsupported"
+            )
         return
     sample = ", ".join(lm_head_names[:3])
     if len(lm_head_names) > 3:
