@@ -520,6 +520,7 @@ def test_project_target_hidden_is_chunk_equivalent():
 
 
 def test_load_draft_bundle_rejects_future_draft_owned_lm_head(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({"model_type": "qwen3"}))
     mx.save_safetensors(
         str(tmp_path / "model.safetensors"),
         {"lm_head.weight": mx.zeros((2, 2))},
@@ -609,6 +610,7 @@ def test_load_draft_bundle_rejects_non_object_safetensors_weight_map(tmp_path):
 
 
 def test_load_draft_bundle_rejects_index_declared_draft_owned_lm_head(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({"model_type": "qwen3"}))
     (tmp_path / "model.safetensors.index.json").write_text(
         json.dumps({"weight_map": {"lm_head.weight": "model-00001-of-00001.safetensors"}})
     )

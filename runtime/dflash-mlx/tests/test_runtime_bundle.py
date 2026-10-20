@@ -5,6 +5,7 @@
 from types import SimpleNamespace
 
 import pytest
+from dflash_mlx.draft.eagle4 import Eagle4DraftModel
 
 from dflash_mlx.runtime import bundle as runtime_bundle
 from dflash_mlx.runtime import stream_dflash_generate
@@ -430,3 +431,36 @@ def test_runtime_bundle_preserves_specific_draft_load_value_error(monkeypatch):
 
     with pytest.raises(ValueError, match="contains draft-owned lm_head weights"):
         runtime_bundle.load_runtime_bundle(model_ref="Qwen/Qwen3.5-9B", draft_ref=None)
+
+
+def test_runtime_bundle_rejects_eagle4_until_backend_exists(monkeypatch):
+    ops = SimpleNamespace(family=lambda _target_model: "hybrid_gdn")
+    draft_model = Eagle4DraftModel.__new__(Eagle4DraftModel)
+    monkeypatch.setattr(
+        runtime_bundle,
+        "load_target_bundle",
+        lambda *args, **kwargs: _loaded_target(
+            object(),
+            object(),
+            {"resolved_model_ref": "Qwen/Qwen3.8-27B"},
+            ops,
+        ),
+    )
+    monkeypatch.setattr(
+        runtime_bundle,
+        "load_draft_bundle",
+        lambda *args, **kwargs: (draft_model, {"resolved_model_ref": args[0]}),
+    )
+    monkeypatch.setattr(
+        runtime_bundle,
+        "bind_draft_to_target",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("EAGLE-4 must not enter the DFlash backend")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="DFlash engine backend is not implemented"):
+        runtime_bundle.load_runtime_bundle(
+            model_ref="Qwen/Qwen3.8-27B",
+            draft_ref="/models/EAGLE4",
+        )

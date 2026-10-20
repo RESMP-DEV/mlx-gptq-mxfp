@@ -12,10 +12,17 @@ from dflash_mlx.draft.dflash2 import (
     has_dflash2_architecture,
     normalize_dflash2_config,
 )
+from dflash_mlx.draft.eagle4 import (
+    Eagle4DraftModel,
+    Eagle4DraftModelArgs,
+    has_eagle4_architecture,
+)
 from dflash_mlx.model import DFlashDraftModel, DFlashDraftModelArgs
 
 
 def get_draft_model_classes(config: dict[str, Any]):
+    if has_eagle4_architecture(config):
+        return Eagle4DraftModel, Eagle4DraftModelArgs
     if has_dflash2_architecture(config):
         normalize_dflash2_config(config)
         return DFlash2DraftModel, DFlash2DraftModelArgs
