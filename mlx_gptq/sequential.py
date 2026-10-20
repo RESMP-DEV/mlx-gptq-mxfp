@@ -118,12 +118,19 @@ def materialize_module(
         raise KeyError(f"cannot materialize parameter {prefix}.{pname} from checkpoint")
 
     for bname, b in module.named_buffers():
-        if b.is_meta:
-            raw = f"{prefix}.{bname}"
-            if shards.has(raw):
-                sd[bname] = shards.get(raw).to(device)
-            else:
-                raise KeyError(f"meta buffer {prefix}.{bname} not in checkpoint")
+        raw = f"{prefix}.{bname}"
+        if shards.has(raw):
+            value = shards.get(raw)
+            if value.is_floating_point():
+                value = value.to(dtype)
+            sd[bname] = value.to(device)
+        elif b.is_meta:
+            raise KeyError(f"meta buffer {prefix}.{bname} not in checkpoint")
+        else:
+            # ``init_empty_weights(include_buffers=False)`` leaves derived
+            # buffers on CPU. They still have to follow each streamed layer to
+            # its forward device (Gemma 4's layer_scalar is one example).
+            sd[bname] = b.to(device)
 
     module.load_state_dict(sd, strict=False, assign=True)
     # sanity: nothing left on meta
@@ -149,24 +156,58 @@ class _CatchDone(Exception):
 
 
 class Catcher(torch.nn.Module):
-    def __init__(self, store):
+    def __init__(self, store, layer_idx: int, stop: bool = False):
         super().__init__()
         self.store = store
+        self.layer_idx = layer_idx
+        self.stop = stop
 
-    def forward(self, hidden_states, **kwargs):
-        self.store.append((hidden_states.detach().cpu(), kwargs))
-        raise _CatchDone
+    def forward(self, hidden_states, *args, **kwargs):
+        if self.layer_idx == 0:
+            self.store["hidden"] = hidden_states.detach().cpu()
+        self.store["contexts"][self.layer_idx] = (args, kwargs)
+        if self.stop:
+            raise _CatchDone
+        return hidden_states
 
 
-def _move_kwargs(kwargs, device):
+def _cpu_context(value, memo):
+    """Copy tensor context to CPU while preserving shared object identity."""
+    key = id(value)
+    if key in memo:
+        return memo[key]
+    if isinstance(value, torch.Tensor):
+        result = value.detach().cpu()
+    elif isinstance(value, tuple):
+        result = tuple(_cpu_context(item, memo) for item in value)
+    elif isinstance(value, list):
+        result = [_cpu_context(item, memo) for item in value]
+    elif isinstance(value, dict):
+        result = {name: _cpu_context(item, memo) for name, item in value.items()}
+    else:
+        # Mutable model-owned containers such as Gemma 4's shared_kv_states must
+        # remain shared across decoder layers. They are empty during capture and
+        # are populated with device tensors by the real sequential forwards.
+        result = value
+    memo[key] = result
+    return result
+
+
+def _move_context(value, device):
     def mv(v):
         if isinstance(v, torch.Tensor):
             return v.to(device)
         if isinstance(v, tuple):
             return tuple(mv(x) for x in v)
+        if isinstance(v, list):
+            return [mv(x) for x in v]
         return v
 
-    return {k: mv(v) for k, v in kwargs.items()}
+    return mv(value)
+
+
+def _move_kwargs(kwargs, device):
+    return {k: _move_context(v, device) for k, v in kwargs.items()}
 
 
 # --------------------------------------------------------------------------
@@ -250,7 +291,14 @@ class Pipeline:
 
     @torch.no_grad()
     def catch_layer0_inputs(self, samples: torch.Tensor, batch_size: int):
-        """Returns list of (hidden_cpu, kwargs) per forward batch."""
+        """Capture the layer-0 inputs and per-layer call context for each batch.
+
+        Some architectures select different masks or rotary embeddings per
+        decoder layer. Gemma 4 also passes ``per_layer_input`` positionally,
+        even when that feature is disabled and the value is ``None``. Replacing
+        every decoder layer with a pass-through catcher records the exact call
+        contract for each layer without materializing any decoder weights.
+        """
         # Only the input embeddings are needed before layer 0 (rotary inv_freq
         # buffers are real already; the final norm / lm_head are never reached).
         emb = self.model.get_input_embeddings()
@@ -263,35 +311,63 @@ class Pipeline:
             emb, self._checkpoint_name(emb_name), self.shards, self.dev0, self.dtype
         )
 
-        store = []
-        orig = self.layers[0]
-        self.layers[0] = Catcher(store)
+        batches = []
+        original_layers = list(self.layers)
         try:
             for i in range(0, samples.shape[0], batch_size):
+                captured = {
+                    "hidden": None,
+                    "contexts": [None] * len(self.layers),
+                }
+                for layer_idx in range(len(self.layers)):
+                    self.layers[layer_idx] = Catcher(
+                        captured,
+                        layer_idx,
+                        stop=layer_idx == len(self.layers) - 1,
+                    )
                 ids = samples[i : i + batch_size].to(self.dev0)
                 try:
                     self.model(input_ids=ids, use_cache=False)
                 except _CatchDone:
                     pass
+                if captured["hidden"] is None or any(
+                    context is None for context in captured["contexts"]
+                ):
+                    raise RuntimeError("catcher did not observe every decoder layer")
+                memo = {}
+                contexts = [
+                    (
+                        _cpu_context(args, memo),
+                        {
+                            name: _cpu_context(value, memo)
+                            for name, value in kwargs.items()
+                        },
+                    )
+                    for args, kwargs in captured["contexts"]
+                ]
+                batches.append((captured["hidden"], contexts))
         finally:
-            self.layers[0] = orig
+            for layer_idx, layer in enumerate(original_layers):
+                self.layers[layer_idx] = layer
         free_module(emb)
-        if len(store) == 0:
+        if len(batches) == 0:
             raise RuntimeError("catcher captured nothing; layers_attr wrong?")
-        return store
+        return batches
 
     # ---- per-layer processing --------------------------------------------------
 
     @torch.no_grad()
-    def forward_layer(self, layer, batches, capture_mgr=None):
+    def forward_layer(self, layer, batches, layer_idx, capture_mgr=None):
         """Run all batches through `layer`; returns new hidden states (CPU)."""
         outs = []
-        for hid_cpu, kwargs in batches:
+        for hid_cpu, contexts in batches:
             if capture_mgr is not None:
                 capture_mgr.begin_batch()
             hs = hid_cpu.to(self.dev0, self.dtype)
+            args, kwargs = contexts[layer_idx]
+            positional = _move_context(args, self.dev0)
             kw = _move_kwargs(kwargs, self.dev0)
-            out = layer(hs, **kw)
+            out = layer(hs, *positional, **kw)
             if isinstance(out, tuple):
                 out = out[0]
             outs.append(out.detach().cpu())
@@ -428,6 +504,9 @@ class Pipeline:
                                 "in_features": C,
                                 "tokens": mgr.stashes[task.stash_keys[e]].tokens,
                                 "rel_err": round(float(rel[i]), 6),
+                                "fallback": mgr.fallback_experts.get(
+                                    task.stash_keys[e]
+                                ),
                             },
                         )
                 del W, q, s
@@ -518,9 +597,9 @@ class Pipeline:
 
             if writer.layer_done(L):
                 self.apply_precomputed(layer, L, reader_for_resume)
-                new_batches = self.forward_layer(layer, batches)
-                for i, (___, kw) in enumerate(batches):
-                    batches[i] = (new_batches[i], kw)
+                new_batches = self.forward_layer(layer, batches, L)
+                for i, (___, contexts) in enumerate(batches):
+                    batches[i] = (new_batches[i], contexts)
                 free_module(layer)
                 log.info(
                     "layer %d: resumed from artifacts (%.1fs)", L, time.time() - t0
@@ -531,7 +610,7 @@ class Pipeline:
             n_lin = len(mgr.linear_tasks)
             n_exp = sum(t.num_experts for t in mgr.fused_tasks)
             with mgr:
-                self.forward_layer(layer, batches, capture_mgr=mgr)
+                self.forward_layer(layer, batches, L, capture_mgr=mgr)
             if mgr.fused_tasks:
                 mgr.check_capture_happened()
                 for pname, (mn, med, mx, zeros) in mgr.expert_token_stats().items():
@@ -546,22 +625,27 @@ class Pipeline:
                     )
                     if zeros:
                         log.warning(
-                            "layer %d %s: %d experts saw ZERO tokens "
-                            "(they fall back to data-free rounding); "
-                            "consider more calibration samples",
+                            "layer %d %s: %d experts saw ZERO routed tokens",
                             L,
                             pname,
                             zeros,
                         )
+                for module_name, experts in mgr.backfill_unrouted_experts().items():
+                    log.warning(
+                        "layer %d %s: activation-backfilled unrouted experts %s",
+                        L,
+                        module_name,
+                        experts,
+                    )
             t_cap = time.time()
 
             result = self.solve_layer(L, mgr)
             mgr.drop_all()
             t_solve = time.time()
 
-            new_batches = self.forward_layer(layer, batches)
-            for i, (___, kw) in enumerate(batches):
-                batches[i] = (new_batches[i], kw)
+            new_batches = self.forward_layer(layer, batches, L)
+            for i, (___, contexts) in enumerate(batches):
+                batches[i] = (new_batches[i], contexts)
             free_module(layer)
             if str(self.dev0).startswith("cuda"):
                 torch.cuda.empty_cache()

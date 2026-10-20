@@ -49,6 +49,19 @@ class Stash:
         self.chunks.append(rows.to("cpu", torch.bfloat16))
         self.tokens += rows.shape[0]
 
+    def add_sampled(self, x: torch.Tensor, max_rows: int):
+        """Add a deterministic, evenly spaced sample of input rows."""
+        rows = x.detach().reshape(-1, x.shape[-1])
+        if rows.shape[0] > max_rows:
+            indices = torch.linspace(
+                0,
+                rows.shape[0] - 1,
+                steps=max_rows,
+                device=rows.device,
+            ).long()
+            rows = rows.index_select(0, indices)
+        self.add(rows)
+
     def nbytes(self) -> int:
         return sum(c.numel() * 2 for c in self.chunks)
 
@@ -97,6 +110,9 @@ class CaptureManager:
         self._hooks = []
         self._ptr_registry: dict[int, str] = {}  # expert slice data_ptr -> stash key
         self._batch_seen: dict[int, tuple[torch.Tensor, str]] = {}
+        self._fused_modules: dict[str, torch.nn.Module] = {}
+        self._fused_input_stashes: dict[str, Stash] = {}
+        self.fallback_experts: dict[str, str] = {}
         self._mode = None
 
         excl = re.compile(exclude_regex) if exclude_regex else None
@@ -137,6 +153,11 @@ class CaptureManager:
                         ptr = p.data_ptr() + e * p.stride(0) * p.element_size()
                         self._ptr_registry[ptr] = key
                     self.fused_tasks.append(task)
+                    self._fused_modules[name] = mod
+                    if pname in ("gate_up_proj", "gate_proj", "up_proj"):
+                        self._fused_input_stashes.setdefault(
+                            name, Stash(f"{name}::all_inputs", p.shape[-1])
+                        )
 
         for t in self.linear_tasks:
             self.stashes.setdefault(t.name, Stash(t.name, t.module.in_features))
@@ -154,6 +175,16 @@ class CaptureManager:
                 return
             self._batch_seen[id(x)] = (x, task.stash_key)
             self.stashes[task.stash_key].add(x)
+        return hook
+
+    def _make_fused_input_hook(self, module_name: str):
+        def hook(mod, args, kwargs=None):
+            x = args[0] if args else kwargs["hidden_states"]
+            # 64 rows from each of 64 standard calibration batches gives a
+            # 4,096-row activation-aware fallback without materially changing
+            # the memory profile of normal routed capture.
+            self._fused_input_stashes[module_name].add_sampled(x, 64)
+
         return hook
 
     # ---- fused expert interception -----------------------------------------
@@ -180,6 +211,11 @@ class CaptureManager:
     def __enter__(self):
         for t in self.linear_tasks:
             self._hooks.append(t.module.register_forward_pre_hook(self._make_hook(t)))
+        for name, module in self._fused_modules.items():
+            if name in self._fused_input_stashes:
+                self._hooks.append(
+                    module.register_forward_pre_hook(self._make_fused_input_hook(name))
+                )
         if self._ptr_registry:
             self._mode = self._ExpertMode(self)
             self._mode.__enter__()
@@ -214,6 +250,81 @@ class CaptureManager:
             )
         return out
 
+    @torch.no_grad()
+    def backfill_unrouted_experts(self):
+        """Calibrate never-routed experts from real inputs to their MoE block.
+
+        Multimodal or otherwise specialized experts may receive no tokens in a
+        text-only calibration corpus. For those experts only, use a bounded,
+        deterministic sample of the block's real input activations. Down-proj
+        inputs are then generated with that expert's original gate/up weights.
+        This keeps the fallback activation-aware instead of using a zero
+        Hessian and data-free rounding.
+        """
+        by_module: dict[str, dict[str, FusedExpertTask]] = {}
+        for task in self.fused_tasks:
+            by_module.setdefault(task.module_name, {})[task.param_name] = task
+
+        backfilled = {}
+        for module_name, tasks in by_module.items():
+            source = self._fused_input_stashes.get(module_name)
+            if source is None or source.tokens == 0:
+                continue
+            input_task = next(
+                (
+                    tasks[name]
+                    for name in ("gate_up_proj", "gate_proj", "up_proj")
+                    if name in tasks
+                ),
+                None,
+            )
+            if input_task is None:
+                continue
+            missing = [
+                expert
+                for expert, key in enumerate(input_task.stash_keys)
+                if self.stashes[key].tokens == 0
+            ]
+            if not missing:
+                continue
+
+            for expert in missing:
+                for task in tasks.values():
+                    if task.param_name == "down_proj":
+                        continue
+                    stash = self.stashes[task.stash_keys[expert]]
+                    for chunk in source.chunks:
+                        stash.add(chunk)
+                    self.fallback_experts[task.stash_keys[expert]] = (
+                        "all_expert_inputs"
+                    )
+
+                down_task = tasks.get("down_proj")
+                if down_task is not None:
+                    down_stash = self.stashes[down_task.stash_keys[expert]]
+                    if "gate_up_proj" in tasks:
+                        gate_up = tasks["gate_up_proj"].param[expert]
+                        for chunk in source.chunks:
+                            gate, up = F.linear(
+                                chunk.to(gate_up.device, gate_up.dtype), gate_up
+                            ).chunk(2, dim=-1)
+                            down_stash.add(F.silu(gate) * up)
+                    elif "gate_proj" in tasks and "up_proj" in tasks:
+                        gate_weight = tasks["gate_proj"].param[expert]
+                        up_weight = tasks["up_proj"].param[expert]
+                        for chunk in source.chunks:
+                            x = chunk.to(gate_weight.device, gate_weight.dtype)
+                            down_stash.add(
+                                F.silu(F.linear(x, gate_weight))
+                                * F.linear(x, up_weight)
+                            )
+                    if down_stash.tokens:
+                        self.fallback_experts[down_task.stash_keys[expert]] = (
+                            "all_expert_inputs"
+                        )
+                backfilled.setdefault(module_name, []).append(expert)
+        return backfilled
+
     def check_capture_happened(self):
         """Abort early if fused experts never went through F.linear (e.g. a
         grouped-gemm experts implementation is active)."""
@@ -227,4 +338,6 @@ class CaptureManager:
 
     def drop_all(self):
         for s in self.stashes.values():
+            s.clear()
+        for s in self._fused_input_stashes.values():
             s.clear()
