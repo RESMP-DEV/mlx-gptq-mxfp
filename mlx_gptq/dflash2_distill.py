@@ -663,7 +663,6 @@ def run(args):
     if args.replay_draft and args.stratified_limit and args.limit > 0:
         raise ValueError("stratified cycle sampling is incompatible with replay")
     model = _load_reference(args.model, args.dflash_package, device)
-    model.qat_mxfp4 = args.qat_mxfp4
     lm_head = None
     if args.loss_mode != "selector":
         if not args.lm_head:
@@ -677,6 +676,37 @@ def run(args):
         from .triton_dynamic_conv import triton_grouped_dynamic_convolve
 
         dflash_model._grouped_dynamic_convolve = triton_grouped_dynamic_convolve
+    (
+        dataset,
+        validation_dataset,
+        ids,
+        validation_ids,
+        validation_prompts,
+        validation_fraction,
+    ) = _datasets(args)
+    use_captured_hidden = _use_captured_hidden(args.loss_mode, args.replay_draft)
+    fidelity = None
+    if not use_captured_hidden:
+        fidelity_caches = PromptCaches(
+            len(model.layers), _prompt_order(dataset)
+        )
+        fidelity, fidelity_cycles = replay_fidelity(
+            model,
+            dataset,
+            device,
+            limit=args.fidelity_cycles,
+            threshold=args.fidelity_threshold,
+        )
+        del fidelity_caches
+        print(
+            {
+                "replay_fidelity_cosine": fidelity,
+                "replay_fidelity_cycles": fidelity_cycles,
+            },
+            flush=True,
+        )
+
+    model.qat_mxfp4 = args.qat_mxfp4
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     if args.mode == "lora":
@@ -700,14 +730,6 @@ def run(args):
                 f"{tuple(projection.shape)}"
             )
         projection.data.copy_(initial.to(device).float())
-    (
-        dataset,
-        validation_dataset,
-        ids,
-        validation_ids,
-        validation_prompts,
-        validation_fraction,
-    ) = _datasets(args)
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     wandb_run = _start_wandb(args, output)
@@ -747,25 +769,12 @@ def run(args):
         if checkpoint.get("fingerprint") != fingerprint:
             raise RuntimeError("checkpoint training fingerprint does not match")
         print({"resumed_epoch": start_epoch, "best_validation": best}, flush=True)
-    use_captured_hidden = _use_captured_hidden(args.loss_mode, args.replay_draft)
     caches = None
-    fidelity = None
     if not use_captured_hidden:
         prompt_order = _prompt_order(dataset)
         if validation_dataset is not dataset:
             prompt_order.update(_prompt_order(validation_dataset))
         caches = PromptCaches(len(model.layers), prompt_order)
-        fidelity, fidelity_cycles = replay_fidelity(
-            model, dataset, device, limit=args.fidelity_cycles,
-            threshold=args.fidelity_threshold,
-        )
-        print(
-            {
-                "replay_fidelity_cosine": fidelity,
-                "replay_fidelity_cycles": fidelity_cycles,
-            },
-            flush=True,
-        )
     started = time.time()
     initial_metrics = _evaluate_cycles(
         validation_dataset,
