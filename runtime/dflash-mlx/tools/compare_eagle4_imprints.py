@@ -216,6 +216,10 @@ def _add_parity_and_roofline(payload: dict[str, Any], args: Args) -> None:
     cycles = int(payload.get("cycles_completed", 0) or 0)
     if native_tps > 0 and target_weight_bytes > 0 and cycles > 0:
         tokens_per_cycle = acceptance / cycles + 1.0
+        draft_depth = max(
+            0,
+            int(payload.get("block_tokens", acceptance / cycles + 1)) - 1,
+        )
         payload["roofline"] = {
             "target_weight_bytes": int(target_weight_bytes),
             "draft_weight_bytes": payload.get("draft_weight_bytes"),
@@ -223,6 +227,7 @@ def _add_parity_and_roofline(payload: dict[str, Any], args: Args) -> None:
             "effective_bandwidth_gb_s": native_tps * target_weight_bytes / 1e9,
             "mean_tokens_per_cycle": tokens_per_cycle,
             "mean_acceptance_depth": acceptance / cycles,
+            "draft_depth_per_cycle": draft_depth,
             "weights_only_roofline_tps": (
                 tokens_per_cycle / (1.0 / native_tps)
                 if "draft_weight_bytes" not in payload
@@ -230,7 +235,7 @@ def _add_parity_and_roofline(payload: dict[str, Any], args: Args) -> None:
                 / (
                     1.0 / native_tps
                     + float(payload["draft_weight_bytes"])
-                    * (acceptance / cycles)
+                    * draft_depth
                     / (target_weight_bytes * native_tps)
                 )
             ),
