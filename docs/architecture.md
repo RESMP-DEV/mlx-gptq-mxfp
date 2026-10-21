@@ -72,6 +72,18 @@ provenance and non-claims is not accepted.
   incumbent MXFP4 DFlash2 stack remains best at 51.028 tok/s. Full details,
   commands, and non-claims:
   `evidence/2026-10-21-eagle4-bf16-mxfp4-serving-comparison.md`.
+- Added selective W4 EAGLE-4 draft-body quantization while preserving its
+  embedding, exact full head, and rank-128 selector. Warm median improved to
+  34.522 tok/s with exact native IDs; the default remains explicit
+  `--draft-quant w4`.
+- Audited the seven new upstream MLX commits and rejected the two QMM changes
+  for serving: split-K precision failed on M4 and real model throughput did
+  not improve. Synced the two safe MLX-LM upstream fixes into
+  `RESMP-DEV/mlx-lm`.
+- Pulled and verified DSpark and native-MTP W4 heads, then measured them with
+  upstream `mlx-vlm`: MTP peaked at 27.405 tok/s and DSpark at 24.680 tok/s.
+  The compute-plus-bandwidth model and NVIDIA comparison are recorded in
+  `evidence/2026-10-21-prediction-head-upstream-and-cost-audit.md`.
 
 ## Contracts to preserve
 
