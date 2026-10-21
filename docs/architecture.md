@@ -58,6 +58,21 @@ provenance and non-claims is not accepted.
   explicitly gated until the EAGLE adapter is built. See the implementation
   section of the same evidence receipt.
 
+## 2026-10-21 work log
+
+- Added the correctness-first EAGLE-4 chain backend to the DFlash engine,
+  including absolute target positions, exact candidate-ID rescoring, greedy
+  suppression, and explicit rejection of unsupported tree/sample paths.
+- Parent review caught and repaired the initial zero-based RoPE positions;
+  official DraftExtend uses `seq_len + j`. An independent review approved the
+  pairing and mapping, and its sparse-context and greedy-path repairs are
+  included.
+- Measured corrected EAGLE-4 b2 at 8.618 tok/s on BF16 and 33.568 tok/s on
+  the owned calibrated MXFP4 target, with exact native greedy IDs. The
+  incumbent MXFP4 DFlash2 stack remains best at 51.028 tok/s. Full details,
+  commands, and non-claims:
+  `evidence/2026-10-21-eagle4-bf16-mxfp4-serving-comparison.md`.
+
 ## Contracts to preserve
 
 - E2M1 uint32 words use MLX's LSB-first `4*i` layout; byte operands use low
