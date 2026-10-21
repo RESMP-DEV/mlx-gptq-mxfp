@@ -18,6 +18,9 @@ dependencies = [
 # Stage B (packing/inject) runs on Apple Silicon only
 mlx = ["mlx>=0.26", "mlx-lm>=0.24"]
 dev = ["pytest"]
+tracking = [
+    "wandb>=0.22",
+]
 
 [project.scripts]
 mlx-gptq-calibrate = "mlx_gptq.calibrate:main"

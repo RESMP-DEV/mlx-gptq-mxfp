@@ -79,6 +79,25 @@ provenance and non-claims is not accepted.
   `i` and token `i+1` with teacher logits row `i+1`. The real private bank and
   all 511 pairs passed on Strix. See
   `evidence/2026-10-21-flashnext-mtp-bank-loader.json`.
+- Implemented and exercised the native MTP itself. Transformers 5.18 ignores
+  `mtp.*`, so `FlashNextMTP` loads all 31 MTP tensors plus the shared embedding
+  and head and reuses the trunk's exact attention, gated-residual, and MoE
+  blocks. On captured row 0/token 795 it emits argmax 6195, exactly the next
+  sidecar input token, validating the two-ahead chain. A compact 33-tensor
+  training checkpoint is 7,757,104,472 bytes.
+- Added `FlashNextMTP` MXFP4 QAT with float32 LoRA masters over 18 selected
+  dense/shared modules, absolute source-position RoPE inputs, full-vocabulary
+  CE plus TV, dynamic FP16 scaling for a future T4 run, exact effective-grid
+  export, and offline-to-Forge W&B sync. A
+  real 16-step CPU QAT slice improved same-prompt validation CE from 11.045 to
+  9.036 and top-1 match from 0.98% to 5.88%. This is not live acceptance.
+- The T4 lane was allocation-first and Colab assigned T4s three times, but
+  `exec`, `console`, SSH, and fresh `run` all failed in the same Jupyter
+  WebSocket path while HTTP upload worked. No T4 training step is claimed. For
+  this MTP-only path, eager/SDPA is the sound backend; compiled generic
+  FlexAttention can execute on T4 but has no model-level integration or benefit
+  at one-token sequence length. `wandb` is the only added dependency. Full
+  evidence: `evidence/2026-10-21-flashnext-mtp-mxfp4-qat.json`.
 
 ## Contracts to preserve
 

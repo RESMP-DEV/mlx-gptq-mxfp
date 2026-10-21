@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-21T16:41:00Z",
+  "operator": "Codex",
+  "scope": "Implement and exercise native Flash-Next MTP MXFP4 QAT with full-vocabulary teacher supervision and Weights and Biases tracking.",
+  "source_revision": "a07b4b4309976238fcc9d05e4746a3763f278e00",
+  "source_dirty": true,
+  "model_implementation": {
+    "transformers_surface": "Transformers 5.18.0 has Qwen4Exp trunk classes but no MTP model and explicitly ignores mtp.* checkpoint tensors.",
+    "new_module": "mlx_gptq/flashnext_mtp_model.py",
+    "weights": "All 31 mtp.* tensors plus shared token embedding and shared lm_head load exactly from the local BF16 checkpoint.",
+    "parameter_count": 3878549248,
+    "input_contract": "Verifier residual row i of width 10240 plus token at i+1 at absolute RoPE position i; output predicts token at i+2 through the shared head.",
+    "chain_smoke": "For source row 0/token 795, the student argmax is 6195, exactly the next sidecar input token; full-vocabulary cosine against teacher row 1 is 0.739159345626831.",
+    "compact_export": {
+      "script": "scripts/export_flashnext_mtp_checkpoint.py",
+      "tensor_count": 33,
+      "shard_count": 30,
+      "bytes": 7757104472,
+      "receipt_sha256": "7bcda68172e72b868666ef59d6780a1b6dfedbd36a62c35ec960e727ee58d2ab",
+      "non_claim": "The compact export is a training input, not a Strata runtime GGUF."
+    }
+  },
+  "qat_trainer": {
+    "module": "mlx_gptq/flashnext_mtp_train.py",
+    "dataset_module": "mlx_gptq/flashnext_mtp.py",
+    "objective": "Teacher-probability cross-entropy 0.1 plus total variation 0.9 over all 248320 logits.",
+    "qat": "MXFP4 fake-quant with straight-through gradients on each selected effective LoRA weight.",
+    "selected_modules": [
+      "fc_embedding",
+      "fc_hidden",
+      "self_attn q/k/v/o/index_qk",
+      "attention and MLP hyper-connection projections",
+      "final mixer down/up projections",
+      "shared expert gate/up/down"
+    ],
+    "selected_module_count": 18,
+    "trainable_parameters": 1092676,
+    "lora_master_dtype": "float32",
+    "position_contract": "The trainer passes source_position from every Strata pair to FlashNextMTP. At one-token sequence length the common Q/K rotation cancels, so this bank's metrics match the earlier zero-position run, but absolute positions are now explicit and correct for multi-row sequences.",
+    "t4_recipe": "Frozen float16 base, float32 LoRA masters, dynamic GradScaler, MXFP4 straight-through QAT.",
+    "run": {
+      "device": "M4 CPU",
+      "dtype": "bfloat16",
+      "bank_rows": 512,
+      "mtp_pairs": 511,
+      "training_pairs": 409,
+      "validation_pairs": 102,
+      "steps": 16,
+      "attention": "eager",
+      "position_source": "bank sidecar source_position",
+      "elapsed_seconds": 67.82199096679688,
+      "export": {
+        "lora_tensors": 54,
+        "qat_tensors": 36,
+        "qat_artifact": true
+      },
+      "initial_validation": {
+        "ce": 11.045360294919387,
+        "tv": 0.9803889188550267,
+        "top1_match": 0.00980392156862745
+      },
+      "final_validation": {
+        "ce": 9.036424903893003,
+        "tv": 0.9549296555638898,
+        "top1_match": 0.058823529411764705
+      },
+      "artifacts": {
+        "lora_bytes": 4376160,
+        "lora_sha256": "a19f04a06a4076a89d88eabd8b7c49b9f7f19e311b81f279c7372abca6a2b95f",
+        "qat_bytes": 92002504,
+        "qat_sha256": "b10f49569ce0075d0bc5b3c414a101358024d1dfb394e6f42b3e57b1e585f7bb",
+        "receipt_sha256": "4e148d9ed490627c042e904fa3308f005be4fdc4749a4f49c0dc305ab827afd4"
+      }
+    }
+  },
+  "wandb": {
+    "version": "0.31.0",
+    "dependency": "Optional project extra `tracking` in pyproject.toml",
+    "project": "flashnext-mtp-mxfp4-qat",
+    "sync_target": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat",
+    "runs": [
+      {
+        "id": "031amhnn",
+        "name": "effortless-bird-1",
+        "url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/031amhnn",
+        "scope": "two-step plumbing smoke"
+      },
+      {
+        "id": "ccnnvsy4",
+        "name": "whole-snowball-2",
+        "url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/ccnnvsy4",
+        "scope": "two-step dynamic-scaling smoke"
+      },
+      {
+        "id": "llt5un6r",
+        "name": "flashnext-mtp-cpu-mxfp4-16step",
+        "url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/llt5un6r",
+        "scope": "historical 16-step real-bank QAT run before explicit absolute-position wiring"
+      },
+      {
+        "id": "z4dw1vi4",
+        "name": "flashnext-mtp-cpu-mxfp4-cleanup-smoke-2",
+        "url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/z4dw1vi4",
+        "scope": "two-step real-bank smoke after detaching the aggregate loss metric"
+      },
+      {
+        "id": "bi3g1831",
+        "name": "flashnext-mtp-cpu-mxfp4-16step-absolute-position",
+        "url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/bi3g1831",
+        "scope": "16-step real-bank QAT run with explicit absolute positions before QAT-only export gating"
+      },
+      {
+        "id": "96x861q8",
+        "name": "flashnext-mtp-cpu-mxfp4-16step-final",
+        "url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/96x861q8",
+        "scope": "authoritative 16-step real-bank QAT run from the final trainer"
+      }
+    ]
+  },
+  "attention_and_dependencies": {
+    "target_path": "The native MTP layer is full/QSA attention, not a GDN layer; its custom PyTorch path reuses Qwen4ExpTextAttention.",
+    "model_supported_backends": "eager and SDPA only. Transformers Qwen4Exp declares FlashAttention-2 and FlexAttention unsupported for this architecture.",
+    "t4_generic_results_from_prior_live_probe": {
+      "sdpa_math": true,
+      "sdpa_mem_efficient": true,
+      "sdpa_flash": false,
+      "sdpa_cudnn": false,
+      "flex_eager": "executes but materializes full scores",
+      "flex_compiled": true,
+      "flash_attn_package": false,
+      "xformers_package": false,
+      "liger_package": false,
+      "float8_gemms": false
+    },
+    "decision": "Use eager or SDPA for this one-token-per-pair MTP training path. A custom FlexAttention integration is technically possible on T4 but adds compile cost with no benefit at sequence length one and is not model-level supported by Transformers.",
+    "dependencies_added": [
+      "wandb 0.31.0 under optional extra tracking"
+    ],
+    "dependencies_not_added": [
+      "peft: the trainer owns a small float32 LoRA implementation",
+      "flash-attn: excluded on SM 7.5 and unsupported by Qwen4Exp",
+      "xformers: PyTorch mem-efficient SDPA is already available",
+      "Liger: no measured fused-loss bottleneck and no SM 7.5 pass",
+      "fla/causal-conv1d/kernels: unnecessary for MTP-only training because the MTP layer is full attention"
+    ]
+  },
+  "colab_execution_boundary": {
+    "availability": "Allocation-first policy was followed. Three T4 attempts succeeded in assigning a Tesla T4 and reached Session READY.",
+    "attempts": [
+      {
+        "session": "flashnext-mtp-mxfp4-qat-20261021",
+        "result": "Allocated after one backend runtime retry; exec failed with WebSocketConnectionClosedException; kernel restart HTTP request succeeded but exec still failed; session stopped."
+      },
+      {
+        "session": "flashnext-mtp-mxfp4-qat-20261021-b",
+        "result": "Allocated READY; a 20-byte upload succeeded; exec/console/SSH failed over WebSocket; stop ended with backend unassign 404 and no local session remained."
+      },
+      {
+        "session": "flashnext-mtp-probe-run",
+        "result": "Fresh colab run allocated READY, failed the same Jupyter WebSocket send, and automatically terminated the session."
+      }
+    ],
+    "diagnosis": "T4 assignment and HTTP upload work; the current Colab CLI/runtime Jupyter WebSocket execution path repeatedly times out. This is not a compute-unit balance or availability failure.",
+    "non_claim": "No T4 QAT step ran, so T4 memory, throughput, FP16 overflow recovery, and compiled FlexAttention behavior for this target remain unmeasured."
+  },
+  "checks": [
+    {
+      "command": "uv run --frozen ruff check mlx_gptq/flashnext_mtp.py mlx_gptq/flashnext_mtp_model.py mlx_gptq/flashnext_mtp_train.py scripts/export_flashnext_mtp_checkpoint.py tests/test_flashnext_mtp.py tests/test_flashnext_mtp_train.py tests/test_export_flashnext_mtp_checkpoint.py",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run --frozen --extra dev python -m pytest tests/test_flashnext_mtp.py tests/test_flashnext_mtp_train.py tests/test_export_flashnext_mtp_checkpoint.py -q",
+      "exit_code": 0,
+      "result": "12 focused tests passed."
+    },
+    {
+      "command": "just quality",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run --frozen --extra tracking wandb sync <offline-run>",
+      "exit_code": 0,
+      "result": "Final run 96x861q8, warning-regression smoke z4dw1vi4, and intermediate absolute-position run bi3g1831 uploaded to the private Forge W&B project; three earlier runs remain as history."
+    }
+  ],
+  "non_claims": [
+    "The 511 pairs come from one private prompt and validation is not session-disjoint live acceptance.",
+    "The QAT candidate is not integrated into Strata serving and is not promoted.",
+    "The compact checkpoint is not published.",
+    "CPU QAT does not qualify T4 performance or numerical stability.",
+    "The chain smoke validates next-token chaining, not bitwise parity with Strata's quantized native MTP runtime."
+  ]
+}
