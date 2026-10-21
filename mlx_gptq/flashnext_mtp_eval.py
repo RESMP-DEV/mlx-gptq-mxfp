@@ -17,7 +17,11 @@ from typing import Any
 import torch
 from safetensors.torch import load_file
 
-from .flashnext_mtp import NativeMTPBank, NativeMTPPairDataset
+from .flashnext_mtp import (
+    MixedNativeMTPPairDataset,
+    NativeMTPBank,
+    NativeMTPPairDataset,
+)
 from .flashnext_mtp_model import FlashNextMTP
 from .flashnext_mtp_train import split_pairs
 from .grid import dequantize_mxfp
@@ -122,6 +126,7 @@ def per_pair(
             student_prob = torch.exp(student_log_prob)
             records.append(
                 {
+                    "bank_index": float(pair.get("bank_index", torch.tensor(0)).item()),
                     "index": float(index),
                     "source_position": float(int(pair["source_position"])),
                     "loss_ce": float(-(teacher_prob * student_log_prob).sum(dim=-1)),
@@ -187,7 +192,13 @@ def _binomial_coefficient(n: int, k: int) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True, type=Path)
-    parser.add_argument("--bank", required=True, type=Path)
+    parser.add_argument(
+        "--bank",
+        required=True,
+        type=Path,
+        action="append",
+        help="A native MTP bank; repeat to evaluate a mixed multi-prompt set.",
+    )
     parser.add_argument("--lora", type=Path)
     parser.add_argument("--qat", type=Path)
     parser.add_argument("--output", required=True, type=Path)
@@ -209,8 +220,13 @@ def build_parser() -> argparse.ArgumentParser:
 def run(arguments: argparse.Namespace) -> int:
     started = time.time()
     dtype = getattr(torch, arguments.dtype)
-    bank = NativeMTPBank(Path(arguments.bank))
-    dataset = NativeMTPPairDataset(bank)
+    banks = [NativeMTPBank(Path(path)) for path in arguments.bank]
+    bank = banks[0] if len(banks) == 1 else None
+    dataset: Any = (
+        NativeMTPPairDataset(banks[0])
+        if len(banks) == 1
+        else MixedNativeMTPPairDataset(banks)
+    )
     selected = (
         list(range(len(dataset)))
         if arguments.limit <= 0
@@ -247,7 +263,19 @@ def run(arguments: argparse.Namespace) -> int:
         "split": arguments.split,
         "validation_fraction": arguments.validation_fraction,
         "seed": arguments.seed,
-        "bank": bank.summary(hashes=True),
+        "bank": (
+            bank.summary(hashes=True)
+            if bank is not None
+            else {
+                "mix": True,
+                "banks": [item.summary(hashes=True) for item in banks],
+                "pairs_per_bank": (
+                    dataset.per_bank_counts()
+                    if isinstance(dataset, MixedNativeMTPPairDataset)
+                    else [len(dataset)]
+                ),
+            }
+        ),
         "base": base,
     }
     if has_candidate:
