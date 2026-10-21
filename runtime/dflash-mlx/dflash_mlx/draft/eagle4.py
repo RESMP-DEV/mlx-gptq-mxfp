@@ -21,6 +21,8 @@ import mlx.nn as nn
 from mlx_lm.models.base import scaled_dot_product_attention
 from mlx_lm.models.qwen3 import MLP
 
+from dflash_mlx.model import DraftRuntimeCapabilities
+
 EAGLE4_ARCHITECTURE = "LlamaForCausalLMEagle4"
 EAGLE4_NUM_AUX_HIDDEN_STATES = 3
 EAGLE4_LAYER_TYPES = frozenset(("sliding_attention",))
@@ -471,6 +473,14 @@ class Eagle4DraftModel(nn.Module):
         super().__init__()
         self.args = args
         self.model_type = "eagle4"
+        self.block_size = 8
+        self.mask_token_id = 0
+        self.capabilities = DraftRuntimeCapabilities(
+            default_block_tokens=4,
+            max_block_tokens=16,
+            supports_copyspec=False,
+            supports_ddtree=False,
+        )
         self.embed_tokens = nn.Embedding(args.vocab_size, args.hidden_size)
         self.fc_norm = [
             nn.RMSNorm(args.target_hidden_size, eps=args.rms_norm_eps)
@@ -494,6 +504,10 @@ class Eagle4DraftModel(nn.Module):
     def sanitize(self, weights: dict[str, mx.array]) -> dict[str, mx.array]:
         _validate_weights(weights, self.args)
         return weights
+
+    @property
+    def target_layer_ids(self) -> tuple[int, ...]:
+        return self.args.target_layer_ids
 
     def bind_target_model(self, target_model: Any, *, target_ops: Any) -> None:
         text_model = target_ops.text_model(target_model)
@@ -536,9 +550,36 @@ class Eagle4DraftModel(nn.Module):
             positions = mx.arange(length, dtype=mx.int32)[None, :]
             positions = mx.broadcast_to(positions, (batch, length))
 
-        embedding = self.embed_tokens(input_ids)
         projected = self.project_target_hidden(target_hidden)
-        hidden = self.layers[0](embedding, projected, positions)
+        return self.forward_projected(input_ids, projected, positions)
+
+    def forward_projected(
+        self,
+        input_ids: mx.array,
+        projected_features: mx.array,
+        positions: mx.array | None = None,
+    ) -> mx.array:
+        """Run the one-layer body on already projected H-wide features."""
+        if input_ids.ndim != 2 or not mx.issubdtype(input_ids.dtype, mx.integer):
+            raise ValueError(
+                "EAGLE4 input_ids must have integer shape [batch, sequence]"
+            )
+        batch, length = input_ids.shape
+        if projected_features.shape[:2] != (batch, length):
+            raise ValueError(
+                "EAGLE4 input_ids and projected features disagree on sequence shape"
+            )
+        if projected_features.shape[-1] != self.args.hidden_size:
+            raise ValueError(
+                "EAGLE4 projected features must have draft hidden_size "
+                f"{self.args.hidden_size}"
+            )
+        if positions is None:
+            positions = mx.arange(length, dtype=mx.int32)[None, :]
+            positions = mx.broadcast_to(positions, (batch, length))
+
+        embedding = self.embed_tokens(input_ids)
+        hidden = self.layers[0](embedding, projected_features, positions)
         return self.norm(hidden)
 
     def __call__(

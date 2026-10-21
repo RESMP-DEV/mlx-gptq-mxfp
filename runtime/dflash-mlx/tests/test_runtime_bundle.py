@@ -6,16 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 from dflash_mlx.draft.eagle4 import Eagle4DraftModel
-
+from dflash_mlx.draft.eagle4_backend import Eagle4DraftBackend
+from dflash_mlx.runtime import VerifyConfig, stream_dflash_generate
 from dflash_mlx.runtime import bundle as runtime_bundle
-from dflash_mlx.runtime import stream_dflash_generate
 from dflash_mlx.runtime.registry import (
     DRAFT_REGISTRY,
     resolve_effective_draft_quant,
     resolve_model_support_spec,
     resolve_optional_draft_ref,
 )
-
 
 EXPECTED_DRAFT_REGISTRY = {
     "Qwen3.5-4B": "z-lab/Qwen3.5-4B-DFlash",
@@ -44,8 +43,7 @@ def _loaded_target(target_model, tokenizer, meta, ops):
 def test_runtime_registry_preserves_draft_resolution():
     assert DRAFT_REGISTRY == EXPECTED_DRAFT_REGISTRY
     assert (
-        resolve_optional_draft_ref("Qwen/Qwen3.5-9B", None)
-        == "z-lab/Qwen3.5-9B-DFlash"
+        resolve_optional_draft_ref("Qwen/Qwen3.5-9B", None) == "z-lab/Qwen3.5-9B-DFlash"
     )
     assert (
         resolve_optional_draft_ref("Qwen/Qwen3.5-27B", None)
@@ -75,7 +73,9 @@ def test_runtime_registry_preserves_draft_resolution():
     assert resolve_model_support_spec("Qwen/Qwen3.5-9B").defaults.draft_quant == "w4"
     assert resolve_model_support_spec("Qwen/Qwen3.8-27B").defaults.draft_quant == "w4"
     assert (
-        resolve_model_support_spec("mlx-community/gemma-4-31b-it-4bit").defaults.draft_quant
+        resolve_model_support_spec(
+            "mlx-community/gemma-4-31b-it-4bit"
+        ).defaults.draft_quant
         == "w4"
     )
 
@@ -152,7 +152,9 @@ def test_runtime_bundle_unknown_target_without_draft_fails_clearly(monkeypatch):
         ),
     )
 
-    with pytest.raises(ValueError, match="No DFlash draft model found for 'unknown/model'"):
+    with pytest.raises(
+        ValueError, match="No DFlash draft model found for 'unknown/model'"
+    ):
         runtime_bundle.load_runtime_bundle(model_ref="unknown/model", draft_ref=None)
 
 
@@ -178,8 +180,10 @@ def test_runtime_bundle_loads_and_binds_draft(monkeypatch):
     monkeypatch.setattr(
         runtime_bundle,
         "load_draft_bundle",
-        lambda draft_ref, **kwargs: calls.append(("draft", draft_ref, kwargs))
-        or (draft_model, {"resolved_model_ref": draft_ref}),
+        lambda draft_ref, **kwargs: (
+            calls.append(("draft", draft_ref, kwargs))
+            or (draft_model, {"resolved_model_ref": draft_ref})
+        ),
     )
 
     def fake_bind(draft, target, *, target_ops):
@@ -239,10 +243,14 @@ def test_runtime_bundle_applies_model_default_draft_quant(monkeypatch):
     monkeypatch.setattr(
         runtime_bundle,
         "load_draft_bundle",
-        lambda draft_ref, **kwargs: draft_calls.append((draft_ref, kwargs))
-        or (draft_model, {"resolved_model_ref": draft_ref}),
+        lambda draft_ref, **kwargs: (
+            draft_calls.append((draft_ref, kwargs))
+            or (draft_model, {"resolved_model_ref": draft_ref})
+        ),
     )
-    monkeypatch.setattr(runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(runtime_bundle, "EagerDraftBackend", lambda: draft_backend)
 
     bundle = runtime_bundle.load_runtime_bundle(
@@ -281,7 +289,9 @@ def test_runtime_bundle_does_not_forward_sdpa_override(monkeypatch):
         "load_draft_bundle",
         lambda draft_ref, **kwargs: (draft_model, {"resolved_model_ref": draft_ref}),
     )
-    monkeypatch.setattr(runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(runtime_bundle, "EagerDraftBackend", lambda: draft_backend)
 
     bundle = runtime_bundle.load_runtime_bundle(
@@ -315,10 +325,14 @@ def test_runtime_bundle_draft_quant_none_disables_model_default(monkeypatch):
     monkeypatch.setattr(
         runtime_bundle,
         "load_draft_bundle",
-        lambda draft_ref, **kwargs: draft_calls.append((draft_ref, kwargs))
-        or (draft_model, {"resolved_model_ref": draft_ref}),
+        lambda draft_ref, **kwargs: (
+            draft_calls.append((draft_ref, kwargs))
+            or (draft_model, {"resolved_model_ref": draft_ref})
+        ),
     )
-    monkeypatch.setattr(runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(runtime_bundle, "EagerDraftBackend", lambda: draft_backend)
 
     bundle = runtime_bundle.load_runtime_bundle(
@@ -354,7 +368,9 @@ def test_runtime_bundle_draft_override_still_exposes_support_spec(monkeypatch):
         "load_draft_bundle",
         lambda draft_ref, **kwargs: (object(), {"resolved_model_ref": draft_ref}),
     )
-    monkeypatch.setattr(runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runtime_bundle, "bind_draft_to_target", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(runtime_bundle, "EagerDraftBackend", lambda: draft_backend)
 
     bundle = runtime_bundle.load_runtime_bundle(
@@ -433,17 +449,14 @@ def test_runtime_bundle_preserves_specific_draft_load_value_error(monkeypatch):
         runtime_bundle.load_runtime_bundle(model_ref="Qwen/Qwen3.5-9B", draft_ref=None)
 
 
-def test_runtime_bundle_rejects_eagle4_until_backend_exists(monkeypatch):
+def test_runtime_bundle_selects_eagle4_backend_and_rejects_ddtree(monkeypatch):
     ops = SimpleNamespace(family=lambda _target_model: "hybrid_gdn")
     draft_model = Eagle4DraftModel.__new__(Eagle4DraftModel)
     monkeypatch.setattr(
         runtime_bundle,
         "load_target_bundle",
         lambda *args, **kwargs: _loaded_target(
-            object(),
-            object(),
-            {"resolved_model_ref": "Qwen/Qwen3.8-27B"},
-            ops,
+            object(), object(), {"resolved_model_ref": "Qwen/Qwen3.8-27B"}, ops
         ),
     )
     monkeypatch.setattr(
@@ -454,13 +467,18 @@ def test_runtime_bundle_rejects_eagle4_until_backend_exists(monkeypatch):
     monkeypatch.setattr(
         runtime_bundle,
         "bind_draft_to_target",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("EAGLE-4 must not enter the DFlash backend")
-        ),
+        lambda *args, **kwargs: None,
     )
 
-    with pytest.raises(ValueError, match="DFlash engine backend is not implemented"):
+    bundle = runtime_bundle.load_runtime_bundle(
+        model_ref="Qwen/Qwen3.8-27B",
+        draft_ref="/models/EAGLE4",
+    )
+    assert isinstance(bundle.draft_backend, Eagle4DraftBackend)
+
+    with pytest.raises(ValueError, match="EAGLE-4 draft does not support"):
         runtime_bundle.load_runtime_bundle(
             model_ref="Qwen/Qwen3.8-27B",
             draft_ref="/models/EAGLE4",
+            verify_config=VerifyConfig.from_mode("ddtree"),
         )

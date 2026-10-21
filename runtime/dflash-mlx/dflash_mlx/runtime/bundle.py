@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from dflash_mlx.draft.eagle4 import Eagle4DraftModel
+from dflash_mlx.draft.eagle4_backend import Eagle4DraftBackend
 from dflash_mlx.draft_backend import DraftBackend, EagerDraftBackend
 from dflash_mlx.engine.target_ops import TargetOps, bind_draft_to_target
 from dflash_mlx.runtime import VerifyConfig
@@ -90,10 +91,14 @@ def load_runtime_bundle(
         draft_quant=effective_draft_quant,
     )
     if isinstance(draft_model, Eagle4DraftModel):
-        raise ValueError(
-            "EAGLE-4 draft loading is schema-validated, but the DFlash engine "
-            "backend is not implemented yet"
+        verify_mode = str(
+            getattr(verify_config, "mode", "dflash") if verify_config else "dflash"
         )
+        if verify_mode == "ddtree":
+            raise ValueError("EAGLE-4 draft does not support --verify-mode ddtree")
+        draft_backend: DraftBackend = Eagle4DraftBackend()
+    else:
+        draft_backend = EagerDraftBackend()
     draft_meta = dict(draft_meta)
     draft_meta["draft_quant_spec"] = effective_draft_quant
     draft_meta["draft_quant_source"] = (
@@ -103,7 +108,6 @@ def load_runtime_bundle(
         if effective_draft_quant is not None
         else "none"
     )
-    draft_backend = EagerDraftBackend()
     bind_draft_to_target(draft_model, target_model, target_ops=target_ops)
     return RuntimeBundle(
         target_model=target_model,
