@@ -58,18 +58,38 @@ Agent: Codex
   evidence for the real checkpoint.
 - The eager attention mask test verifies masked additive entries are negative
   infinity and the learned sink column is preserved.
+- Mac BF16 full verification: 15/15 safetensors, 79,575,138,056 bytes, zero
+  failures; manifest SHA-256
+  `853ebfdb733e93a3924fd7d11e14eb1dcdafec50fee6da222249e615eea0da4d`.
+- B550 BF16 full verification: same 15/15 result after repairing partial
+  shards from the verified Mac copy over the ZeroTier lane.
+- Official INT4 reference full verification: 5/5 safetensors, 22,568,912,600
+  bytes, zero failures.
 
 ## Active transfers
 
-- Base BF16: `/Users/kearm/models/RecursiveSI-flint-BF16-2a247be`.
-- Official INT4 reference:
-  `/Users/kearm/models/RecursiveSI-flint-int4-3b93f9`.
-- Both use persistent local LaunchAgents and the HF xet transport. B550 also
-  retains its own resumable BF16 download.
+- Base BF16 is complete and verified on both Mac and B550.
+- Official INT4 reference is complete and verified on Mac.
+- The Mac transfer agents were unloaded after successful completion.
+
+## Calibration state
+
+- B550 calibration is running from the verified source with
+  `cuda:0,cuda:1`, batch size four, MXFP4 group 32, safe-scale-search, seed
+  17, and the pinned 256×2048 matrix.
+- The native Strata service was idle and unqueued. It was temporarily
+  unloaded through its authenticated `POST /unload` control endpoint; a
+  watcher will restore it with `POST /load` after calibration.
+- Layer 0 and the first failed attempt’s completed layer artifacts resumed.
+- The first real MoE layer completed all 768 expert tensors in 70.2 seconds.
+- A routed-slot indexing bug was caught and repaired before the resumed run:
+  top-k expert slots now map back to their originating token indices, and the
+  test coverage uses top-2 routing.
 
 ## Non-claims
 
 - GPTQ calibration, MLX packing, output parity, performance, and Hugging Face
-  publication are not complete yet.
+  publication are not complete yet. The calibration state above is live
+  progress, not a completed run.
 - The official INT4 model is reference-only and will not be republished as the
   owned MXFP4 result.
