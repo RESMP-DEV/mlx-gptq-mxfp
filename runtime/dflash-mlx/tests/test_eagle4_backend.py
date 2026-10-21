@@ -2,11 +2,16 @@
 # Licensed under the Apache License, Version 2.0 - see LICENSE file
 
 import mlx.core as mx
+import mlx.nn as nn
 import numpy as np
 import pytest
 from dflash_mlx.cache.snapshot import TargetHiddenChunks
 from dflash_mlx.draft import eagle4_backend as eagle4_backend_module
-from dflash_mlx.draft.eagle4 import Eagle4DraftModel, Eagle4DraftModelArgs
+from dflash_mlx.draft.eagle4 import (
+    Eagle4DraftModel,
+    Eagle4DraftModelArgs,
+    quantize_eagle4_draft,
+)
 from dflash_mlx.draft.eagle4_backend import Eagle4DraftBackend
 
 
@@ -52,6 +57,21 @@ def _config() -> dict:
 
 def _model() -> Eagle4DraftModel:
     model = Eagle4DraftModel(Eagle4DraftModelArgs.from_dict(_config()))
+    mx.eval(model.parameters())
+    return model
+
+
+def _quantizable_model() -> Eagle4DraftModel:
+    config = _config()
+    config.update(
+        hidden_size=32,
+        target_hidden_size=32,
+        head_dim=32,
+        intermediate_size=64,
+        num_attention_heads=1,
+        num_key_value_heads=1,
+    )
+    model = Eagle4DraftModel(Eagle4DraftModelArgs.from_dict(config))
     mx.eval(model.parameters())
     return model
 
@@ -289,6 +309,40 @@ def test_greedy_path_does_not_build_capture_topk(monkeypatch):
     )
     mx.eval(drafted)
     assert tuple(drafted.shape) == (2,)
+
+
+def test_selective_draft_quantization_preserves_head_contracts():
+    model = _quantizable_model()
+    touched = quantize_eagle4_draft(model, bits=4, group_size=32)
+
+    assert touched == (
+        "fc",
+        "layers.0.mlp.down_proj",
+        "layers.0.mlp.gate_proj",
+        "layers.0.mlp.up_proj",
+        "layers.0.self_attn.k_proj",
+        "layers.0.self_attn.o_proj",
+        "layers.0.self_attn.q_proj",
+        "layers.0.self_attn.v_proj",
+    )
+    assert isinstance(model.fc, nn.QuantizedLinear)
+    assert isinstance(model.layers[0].self_attn.q_proj, nn.QuantizedLinear)
+    assert isinstance(model.layers[0].mlp.gate_proj, nn.QuantizedLinear)
+    assert not isinstance(model.embed_tokens, nn.QuantizedEmbedding)
+    assert not isinstance(model.lm_head, nn.QuantizedLinear)
+    assert not isinstance(model.efficient_lm_head, nn.QuantizedLinear)
+    assert not isinstance(model.efficient_lm_head_down_proj, nn.QuantizedLinear)
+
+    hidden = model.forward_projected(
+        mx.array([[0]]),
+        mx.zeros((1, 1, 32)),
+        mx.array([[0]], dtype=mx.int32),
+    )
+    candidate_ids = model.candidate_ids(hidden)
+    candidate_logits = model.candidate_logits(hidden)
+    mx.eval(hidden, candidate_ids, candidate_logits)
+    assert tuple(candidate_ids.shape) == (1, 1, 2)
+    assert bool(mx.all(mx.isfinite(candidate_logits)))
 
 
 def test_backend_rejects_non_greedy_paths():

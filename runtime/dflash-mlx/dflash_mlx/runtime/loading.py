@@ -268,8 +268,24 @@ def load_draft_bundle(
         get_model_classes=_get_dflash_model_classes,
     )
     quant_spec = _resolve_draft_quant(draft_quant)
+    draft_quantized_modules: list[str] = []
     if quant_spec is not None:
-        nn.quantize(model, bits=quant_spec.weight_bits, group_size=quant_spec.group_size)
+        from dflash_mlx.draft.eagle4 import Eagle4DraftModel, quantize_eagle4_draft
+
+        if isinstance(model, Eagle4DraftModel):
+            draft_quantized_modules = list(
+                quantize_eagle4_draft(
+                    model,
+                    bits=quant_spec.weight_bits,
+                    group_size=quant_spec.group_size,
+                )
+            )
+        else:
+            nn.quantize(
+                model,
+                bits=quant_spec.weight_bits,
+                group_size=quant_spec.group_size,
+            )
         draft_load_dtype = resolve_draft_load_dtype(quant_spec)
         if draft_load_dtype is not None:
             _cast_floating_model(model, draft_load_dtype)
@@ -312,6 +328,7 @@ def load_draft_bundle(
             if quant_spec is not None
             else None
         ),
+        "draft_quantized_modules": list(draft_quantized_modules),
     }
 
 
