@@ -3,8 +3,8 @@
   "recorded_at": "2026-10-21T16:41:00Z",
   "operator": "Codex",
   "scope": "Implement and exercise native Flash-Next MTP MXFP4 QAT with full-vocabulary teacher supervision and Weights and Biases tracking.",
-  "source_revision": "a07b4b4309976238fcc9d05e4746a3763f278e00",
-  "source_dirty": true,
+  "source_revision": "d690b876dfb9419399855f029d7091185d836d04",
+  "source_dirty": false,
   "model_implementation": {
     "transformers_surface": "Transformers 5.18.0 has Qwen4Exp trunk classes but no MTP model and explicitly ignores mtp.* checkpoint tensors.",
     "new_module": "mlx_gptq/flashnext_mtp_model.py",
