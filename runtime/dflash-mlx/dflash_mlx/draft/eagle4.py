@@ -466,6 +466,59 @@ class Eagle4DecoderLayer(nn.Module):
         return hidden + self.mlp(self.post_attention_layernorm(hidden))
 
 
+EAGLE4_DRAFT_QUANT_EXCLUDED = (
+    "embed_tokens",
+    "lm_head",
+    "efficient_lm_head",
+    "efficient_lm_head_down_proj",
+)
+
+
+def eagle4_quantizable_module_paths(model: "Eagle4DraftModel") -> tuple[str, ...]:
+    """List the EAGLE-4 module paths that a weight-only draft quantization may touch.
+
+    The token embedding stays a lookup table, and the two candidate-head
+    projections stay in full precision. The low-rank head only selects
+    candidates, so quantizing it would change the candidate set, and the full
+    head produces the exact scores that decide acceptance.
+    """
+    paths: list[str] = []
+    for name, module in model.named_modules():
+        if not isinstance(module, nn.Linear):
+            continue
+        if name in EAGLE4_DRAFT_QUANT_EXCLUDED:
+            continue
+        paths.append(name)
+    return tuple(sorted(paths))
+
+
+def quantize_eagle4_draft(
+    model: "Eagle4DraftModel",
+    *,
+    bits: int,
+    group_size: int,
+) -> tuple[str, ...]:
+    """Quantize the EAGLE-4 drafter body and report the touched module paths."""
+    allowed = set(eagle4_quantizable_module_paths(model))
+    touched: list[str] = []
+
+    def predicate(path: str, module: nn.Module):
+        if not isinstance(module, nn.Linear):
+            return False
+        if path in allowed:
+            touched.append(path)
+            return True
+        return False
+
+    nn.quantize(
+        model,
+        bits=bits,
+        group_size=group_size,
+        class_predicate=predicate,
+    )
+    return tuple(sorted(touched))
+
+
 class Eagle4DraftModel(nn.Module):
     """Dense EAGLE-4 drafter with full-logits and selected-candidate paths."""
 
