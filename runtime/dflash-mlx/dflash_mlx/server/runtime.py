@@ -17,6 +17,7 @@ import mlx_lm.server as mlx_server
 from dflash_mlx.cache.manager import shutdown_runtime_cache_manager
 from dflash_mlx.observability.writer import enabled as _bench_enabled
 from dflash_mlx.runtime import get_stop_token_ids, stream_dflash_generate
+from dflash_mlx.server.http_server import hardened_server_class
 from dflash_mlx.server.metrics import (
     clear_live_request as _clear_live_request,
     configure_live_metrics as _configure_live_metrics,
@@ -266,6 +267,7 @@ class ServerRuntime:
                     self.host,
                     self.port,
                     response_generator,
+                    server_class=hardened_server_class(),
                     handler_class=handler_class,
                 )
             else:

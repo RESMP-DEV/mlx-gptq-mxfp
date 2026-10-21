@@ -27,7 +27,7 @@ provenance and non-claims is not accepted.
 | Full projection matrix | Dominant activation/GEMM cases qualified; all weights qualified | Extend only when a missing shape owns measured time |
 | Local 27B CCR fallback | Calibrated MXFP4 loopback server qualified at 32 short-context requests | Promote only through source-policy review and idle listener restart |
 | Batched MTP serving | Portable confidence-row, admission, acceptance, and rollback contracts are implemented; live batching is not wired | Exact serial parity, row independence, rollback equality, prefix-cache equality, and paired concurrency gates |
-| Target-only serving mode | Default-off `--target-batch-only` passed three live 32 x 128 acceptance runs at 130 to 142 aggregate tok/s with zero errors, and a paired serial-lane run produced an identical token-ID digest at 17.16 aggregate tok/s | Promote only after a decision on whether the isolated service replaces or complements the resident serial service, and a long-context check on the batch lane |
+| Target-only serving mode | Default-off `--target-batch-only` passed three live 32 x 128 acceptance runs at 128 to 140 aggregate tok/s with zero errors and zero retries, a paired serial-lane run produced an identical token-ID digest, and 64-way and 128-way bursts now complete cleanly after the backlog hardening | Promote only after a decision on whether the isolated service replaces or complements the resident serial service |
 
 ## 2026-10-20 work log
 
@@ -143,6 +143,14 @@ provenance and non-claims is not accepted.
   and 261.6 at four, so long-prompt concurrency stays low and the lane
   should not take a high-concurrency long-prompt workload. See
   `evidence/2026-10-21-target-batch-probe-hardening.md`.
+- Hardened the HTTP server listen backlog. The stdlib server listened with a
+  queue of 5 pending connections, so a burst of concurrent clients had its
+  excess connections reset by the kernel while the server logged 200 for
+  every request. The runtime now serves with a backlog of 1024. A 32-way
+  run that previously needed 13 and 12 client retries now needs none, and
+  64-way and 128-way bursts complete with zero errors. The token-ID digest
+  is unchanged, so the fix changed connection behavior and not output. See
+  `evidence/2026-10-21-http-server-backlog-hardening.md`.
 
 ## Contracts to preserve
 
