@@ -27,7 +27,7 @@ provenance and non-claims is not accepted.
 | Full projection matrix | Dominant activation/GEMM cases qualified; all weights qualified | Extend only when a missing shape owns measured time |
 | Local 27B CCR fallback | Calibrated MXFP4 loopback server qualified at 32 short-context requests | Promote only through source-policy review and idle listener restart |
 | Batched MTP serving | Portable confidence-row, admission, acceptance, and rollback contracts are implemented; live batching is not wired | Exact serial parity, row independence, rollback equality, prefix-cache equality, and paired concurrency gates |
-| Target-only serving mode | Default-off `--target-batch-only` reached 138.95 aggregate tok/s at 32 x 128 direct requests | Promote only after streaming, exact token-ID, and post-deploy health gates |
+| Target-only serving mode | Default-off `--target-batch-only` passed three live 32 x 128 acceptance runs at 130 to 142 aggregate tok/s with zero errors, and a paired serial-lane run produced an identical token-ID digest at 17.16 aggregate tok/s | Promote only after a decision on whether the isolated service replaces or complements the resident serial service, and a long-context check on the batch lane |
 
 ## 2026-10-20 work log
 
@@ -116,10 +116,29 @@ provenance and non-claims is not accepted.
   138.95 aggregate completion tok/s for 32 requests x 128 tokens with exact
   visible greedy-content agreement to the resident serial lane. Added a
   single-call heterogeneous GDN `rollback_batch` primitive and a durable
-  target-batch health/matrix probe. A compatibility scan started but then
-  stopped a pinned Ornith-1.5-122B BF16 transfer; Ornith is a paused research
-  candidate, not a selected serving model. See
-  `evidence/2026-10-21-target-batch-hardening-and-new-model.md`.
+  target-batch health/matrix probe. See
+  `evidence/2026-10-21-target-batch-hardening.md`.
+
+- Hardened the target-batch probe into a post-deploy acceptance tool. It
+  samples `/metrics` on a background thread during the matrix, hashes the
+  exact visible content of every response, offers an optional streaming
+  health request, and captures generated token IDs only from the field the
+  pinned MLX-LM 0.31.3 server actually returns. The token-ID path was
+  verified by executing the pinned server's own response builder.
+- Ran the probe live against an isolated target-batch service on port 8082
+  using the owned calibrated artifact. Three consecutive 32-way runs of 128
+  tokens completed 32 of 32 requests with zero errors, one identical token-ID
+  digest across all rows, a passing streaming health request, and 130.11 to
+  142.29 aggregate completion tok/s. The live runs exposed two defects that
+  are now fixed: transient connection resets under a 32-way burst, which the
+  probe now retries, and the metrics sampler perturbing that burst, so
+  sampling is now opt-in.
+- Paired the batch lane against the resident serial DFlash lane on the same
+  32-way, 128-token workload with token-ID capture. Both lanes produced the
+  same token-ID digest and the same content digest, so batching changed
+  throughput and not output. The batch lane finished in 31.48 s at 130.11
+  aggregate tok/s; the serial lane took 238.67 s at 17.16 aggregate tok/s.
+  See `evidence/2026-10-21-target-batch-probe-hardening.md`.
 
 ## Contracts to preserve
 

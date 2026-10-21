@@ -1,4 +1,4 @@
-# Target batch hardening and recent-model preparation receipt
+# Target batch hardening receipt
 
 ## Scope
 
@@ -7,7 +7,7 @@ pieces:
 
 1. A default-off target-only continuous-batch process mode.
 2. A heterogeneous per-row GDN rollback primitive.
-3. A repeatable target-batch probe and recent-model integration lane.
+3. A repeatable target-batch health and concurrency probe.
 
 The resident DFlash service on ports 8080/8081 was not evicted or restarted.
 An isolated validation service used port 8082 and was stopped after the
@@ -120,67 +120,6 @@ Added `scripts/local27_target_batch_probe.py` with:
 - before/after `/metrics` capture;
 - JSON receipt output.
 
-## Recent-model candidate scan
-
-Live Hugging Face metadata/config/index inspection ranked compatibility, not
-model quality or product fit:
-
-1. `ornith-ai/Ornith-1.5-122B`
-   - created 2026-10-16, updated 2026-10-21;
-   - MIT tag, ungated;
-   - `qwen3_5_moe`, the exact hybrid-GDN family used by this stack;
-   - 125,086,497,008 BF16 parameters;
-   - 48 layers, 256 fused experts, 8 active per token;
-   - vocab 248,320, matching Qwen3.8-27B;
-   - one MTP layer and 785 `mtp.*` tensors;
-   - a separate 930M DFlash2 drafter exists at
-     `incoai/Ornith-1.5-122B-DFlash2`.
-2. `InternScience/Sage-A1.5`
-   - Apache-2.0 and `qwen3_5_moe`, but individual expert tensors, low
-     adoption, and the exact verify-linear-excluded 40/2048/16/2 shape.
-3. `openbmb/MiniCPM-V-4.7-35B-A3B`
-   - Apache-2.0 with a Qwen3.5-MoE text tower, but no `minicpmv4_7` MLX-LM
-     module and no base-checkpoint MTP tensors despite config metadata.
-
-`deepseek-ai/DeepSeek-V4.1-Flash-1017` is intentionally deferred. It is MIT,
-very recent, and uses native FP4 experts with UE8M0 32-wide scales, but its
-`engram_layer_ids` hard-fail in the current DeepSeek MLX model and its 510 GB
-artifact make it a later architecture project rather than the first
-integration.
-
-The full live scan is retained at
-`build/reports/freetoken/workers/recent-model-scout.txt`.
-
-### Paused Ornith transfer
-
-The compatibility scan led to a premature transfer of this source:
-
-```text
-ornith-ai/Ornith-1.5-122B
-revision=7681ef608624e7532d8164128bcffdbdbaf1b1af
-```
-
-HFD transfers were started to both machines, then stopped after review:
-
-- Main: `/Users/kearm/models/Ornith-1.5-122B-BF16-7681ef`
-- B550: `/home/kearm/models/Ornith-1.5-122B-BF16-7681ef`
-
-Both HFD processes initially stalled in IPv6 `SYN_SENT`. A temporary IPv4
-resolver wrapper restored transfer. The launchd/nohup jobs were then removed.
-At the stop snapshot the partial trees were about 34 GiB on main and 16 GiB
-on B550. They are resumable but not selected, not complete, and not size
-verified.
-
-Ornith's only defensible research use is a compatibility stress test of a
-newer Qwen3.5-MoE checkpoint with MTP and 256 experts. It does not solve a
-new serving use case, has no measured quality advantage, and is not a
-replacement for the resident Qwen3.8-27B service. Do not resume it without an
-explicit model-selection decision.
-
-No external or community quant is an acceptance baseline. The first-party
-Ornith MLX/NVFP4 artifacts are reference candidates only; calibration must
-come from this stack.
-
 ## Verification
 
 Focused commands:
@@ -208,6 +147,4 @@ campaign tests, and CUDA probe compilation.
 - Streaming request behavior is not claimed.
 - Exact token-ID parity was not captured; only exact visible greedy content.
 - `rollback_batch` is proven synthetically and not yet used by live serving.
-- The Ornith transfer is incomplete and unverified at receipt time.
-- No Ornith inference, calibration, conversion, or upload has run.
 - The resident local27 DFlash service remains the default loaded service.
