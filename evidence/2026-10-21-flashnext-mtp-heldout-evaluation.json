@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-21T20:30:00Z",
+  "operator": "Codex",
+  "scope": "Measure the Flash-Next native MTP MXFP4 QAT candidate against its frozen base on a session-disjoint teacher bank, then publish the first draft to a private Hugging Face repository.",
+  "source_revision": "09a665c41592f2287750a6435e61738d1010d7d6",
+  "source_dirty": false,
+  "harness": {
+    "module": "mlx_gptq/flashnext_mtp_eval.py",
+    "method": "The effective weight is rebuilt from the stored E2M1 codes and E8M0 scales, so every number describes the artifact that would be served rather than the float LoRA masters.",
+    "modules_applied": 18,
+    "mxfp4_quantization_max_absolute_error": 3.187445640563965,
+    "mxfp4_quantization_max_relative_error": 0.38462766363257567
+  },
+  "heldout_bank": {
+    "purpose": "Session-disjoint evaluation. The training bank is one private prompt; this is a different prompt from a different corpus partition.",
+    "prompt_source": "fable-nemotron-cp-cpp in the local private retrieval corpus, capped to 512 pinned qwen35 tokens",
+    "disjointness_evidence": "The prompt id list differs from the training bank, all four artifact hashes differ, and the tokenized reference prompt reproduced the training bank's first 512 ids exactly through the same llama.cpp tokenizer, so the two banks share no prompt.",
+    "collection": "Strata native verifier collector at revision d2d6e413 on the Strix RTX 5070 Laptop GPU, same flags and semantics as the training bank.",
+    "rows": 512,
+    "mtp_pairs": 511,
+    "positions": [
+      511,
+      1022
+    ],
+    "sha256": {
+      "logits": "9d5a76b2715c2546a9c2339ccc80a4ea6607ac526f6ef2adf47faebc38c73904",
+      "residual": "5ff1cc6f0e64cb0527d75bea2cfbb5aee770e0148a7c7895398d7a067a5b4508",
+      "sidecar": "e46a941d583630f2776bee6d238ef5e991ccee1a347f4b8f729a90a0f9eb5941",
+      "prompt_ids": "d638f2cee63bc92c3cff891119ef22b38984d16fce187de081570d0fd60f86e0"
+    },
+    "embedding_service": "The resident 127.0.0.1:1236 service stayed at 2538 MiB throughout, before and after collection."
+  },
+  "results": {
+    "heldout": {
+      "base": {
+        "loss_ce": 7.835738079082914,
+        "loss_tv": 0.9131685017249064,
+        "loss_kl": 7.192149610526553,
+        "top1_match": 0.07632093933463796
+      },
+      "candidate": {
+        "loss_ce": 4.374216889506917,
+        "loss_tv": 0.837696391177854,
+        "loss_kl": 3.730628422430467,
+        "top1_match": 0.18395303326810175
+      },
+      "delta": {
+        "loss_ce": -3.461521189575997,
+        "loss_tv": -0.07547211054705238,
+        "loss_kl": -3.4615211880960866,
+        "top1_match": 0.10763209393346379
+      },
+      "paired_test": {
+        "pairs": 511,
+        "top1_candidate_wins": 70,
+        "top1_candidate_losses": 15,
+        "top1_ties": 426,
+        "mcnemar_exact_p_value": 1.1724940227199809e-09,
+        "ce_mean_difference": -3.4615211895759965,
+        "ce_difference_ci95": [
+          -3.7476894855499268,
+          -3.1870596408843994
+        ],
+        "ce_difference_ci95_excludes_zero": true
+      }
+    },
+    "training_bank": {
+      "base": {
+        "loss_ce": 10.789038031768426,
+        "loss_tv": 0.975320061125634,
+        "loss_kl": 10.372428856017304,
+        "top1_match": 0.019569471624266144
+      },
+      "candidate": {
+        "loss_ce": 2.4983598943945537,
+        "loss_tv": 0.43022938279645756,
+        "loss_kl": 2.0817501694592857,
+        "top1_match": 0.6046966731898239
+      },
+      "delta": {
+        "loss_ce": -8.290678137373872,
+        "loss_tv": -0.5450906783291765,
+        "loss_kl": -8.290678686558019,
+        "top1_match": 0.5851272015655578
+      },
+      "paired_test": {
+        "pairs": 511,
+        "top1_candidate_wins": 300,
+        "top1_candidate_losses": 1,
+        "top1_ties": 210,
+        "mcnemar_exact_p_value": 1.4825462265199134e-88,
+        "ce_mean_difference": -8.290678137373872,
+        "ce_difference_ci95": [
+          -8.682533264160156,
+          -7.890939712524414
+        ],
+        "ce_difference_ci95_excludes_zero": true
+      }
+    },
+    "sixteen_step_variant_on_heldout": {
+      "base": {
+        "loss_ce": 7.835738079082914,
+        "loss_tv": 0.9131685017249064,
+        "loss_kl": 7.192149610526553,
+        "top1_match": 0.07632093933463796
+      },
+      "candidate": {
+        "loss_ce": 7.120908229207208,
+        "loss_tv": 0.898957660361585,
+        "loss_kl": 6.477319922659969,
+        "top1_match": 0.09001956947162426
+      },
+      "delta": {
+        "loss_ce": -0.7148298498757057,
+        "loss_tv": -0.014210841363321403,
+        "loss_kl": -0.7148296878665841,
+        "top1_match": 0.0136986301369863
+      },
+      "paired_test": {
+        "pairs": 511,
+        "top1_candidate_wins": 15,
+        "top1_candidate_losses": 8,
+        "top1_ties": 488,
+        "mcnemar_exact_p_value": 0.21003961563110352,
+        "ce_mean_difference": -0.7148298498757052,
+        "ce_difference_ci95": [
+          -0.8870084881782532,
+          -0.5480383038520813
+        ],
+        "ce_difference_ci95_excludes_zero": true
+      }
+    },
+    "interpretation": "The full epoch generalizes to a disjoint prompt with a significant paired effect, and the 16-step variant does not. The much larger same-prompt gain is partly memorization, so the held-out numbers are the honest ones."
+  },
+  "publication": {
+    "repository": "RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft",
+    "url": "https://huggingface.co/RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft",
+    "private": true,
+    "gated": false,
+    "commit": "fa73cf8b5ad217163c86c8e85b3f0f2e4797f277",
+    "files": [
+      "README.md",
+      "flashnext_mtp_lora.safetensors",
+      "flashnext_mtp_mxfp4_qat.safetensors",
+      "heldout-evaluation.json",
+      "training-bank-evaluation.json",
+      "training-receipt.json"
+    ],
+    "round_trip_verification": "The two safetensors artifacts and the held-out evaluation were downloaded back from the Hub and their SHA-256 values match the local files exactly.",
+    "sha256": {
+      "flashnext_mtp_lora.safetensors": "31b1dd9d4acd28d2803146583587ef421886b2f0497dc10096b5e1196fa9df19",
+      "flashnext_mtp_mxfp4_qat.safetensors": "4a2d787fc87a277683a2fb1b63a0fb95ddd8a0f72eb53b63d9bc4d5845e85b10",
+      "heldout-evaluation.json": "2c54591192b0c4779d5f3b9b9f4bba768bc0bc5441599727d97b66471c6cd03c"
+    }
+  },
+  "checks": [
+    {
+      "command": "uv run --frozen --extra dev python -m pytest tests/test_flashnext_mtp_eval.py tests/test_flashnext_mtp.py tests/test_flashnext_mtp_train.py tests/test_export_flashnext_mtp_checkpoint.py -q",
+      "exit_code": 0,
+      "result": "16 focused tests passed."
+    },
+    {
+      "command": "just quality",
+      "exit_code": 0,
+      "result": "Root lint, root tests, DFlash runtime tests, campaign tests, and the CUDA probe compile all passed."
+    },
+    {
+      "command": "uv run --frozen --extra tracking python -m mlx_gptq.flashnext_mtp_eval --bank <heldout> --lora <epoch lora> --qat <epoch qat>",
+      "exit_code": 0,
+      "result": "Held-out base-versus-candidate measurement with paired statistics."
+    },
+    {
+      "command": "curl the published safetensors back from the Hub and compare SHA-256",
+      "exit_code": 0,
+      "result": "All published artifact hashes match the local files."
+    }
+  ],
+  "non_claims": [
+    "Teacher-logit agreement is a proxy for draft quality; it is not live speculative acceptance and not output-quality parity with the target.",
+    "The held-out set is a single disjoint prompt, so this is one held-out sample rather than a multi-prompt corpus.",
+    "The candidate is not integrated into any serving runtime, so no latency, throughput, or end-to-end quality claim is made.",
+    "The published repository is private and is a first draft, not a promotion or a release.",
+    "The 409-step run remains trained on a single private prompt; more prompts are required before the model is a serving candidate."
+  ]
+}

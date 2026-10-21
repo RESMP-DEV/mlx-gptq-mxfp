@@ -113,6 +113,21 @@ provenance and non-claims is not accepted.
   for $0.73 total. Full evidence:
   `evidence/2026-10-21-flashnext-mtp-strix-a6000.json`.
 
+- Evaluated the Flash-Next MTP MXFP4 QAT candidate against its frozen base
+  on a session-disjoint teacher bank collected from a different prompt, with
+  the effective weight rebuilt from the stored MXFP4 codes and scales. On the
+  held-out prompt, cross-entropy fell from 7.836 to 4.374 and top-1 agreement
+  rose from 7.63% to 18.40%, with 70 wins against 15 losses over 511 pairs
+  and an exact McNemar p of 1.17e-09. The same-prompt gain is much larger
+  (top-1 60.47%), so the difference is partly memorization and the held-out
+  numbers are the honest ones. A 16-step variant of the same recipe did not
+  generalize (held-out top-1 9.00%, p of 0.21). The full-epoch artifact was
+  published as a private first draft to
+  `RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft`, and the published
+  artifacts were downloaded back and hash-verified. This is not a serving
+  candidate and no live acceptance was measured. Full evidence:
+  `evidence/2026-10-21-flashnext-mtp-heldout-evaluation.json`.
+
 ## Contracts to preserve
 
 - E2M1 uint32 words use MLX's LSB-first `4*i` layout; byte operands use low
