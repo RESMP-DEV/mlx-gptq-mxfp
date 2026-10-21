@@ -108,6 +108,22 @@ rollback for acceptance counts 0, 1, and 3. Both recurrent state and conv
 state are exactly equal. The primitive is not yet wired into live batched
 speculative serving.
 
+## Live service state
+
+Two loopback services are running, both on the owned calibrated artifact
+`/Users/kearm/models/Qwen3.8-27B-MLX-GPTQ-MXFP4`:
+
+| Service | Label | Port | Mode | Drafter | MLX active |
+|---|---|---|---|---|---|
+| Resident serial DFlash | `dev.resmp.local27-mxfp4` | 8081, admission 8080 | `dflash` | `z-lab-Qwen3.8-27B-DFlash2-GPTQ-MXFP4-1981cycles` | about 19.8 GiB |
+| Target batch | `dev.resmp.local27-target-batch` | 8082 | `target_batch` | none | about 26.1 GiB |
+
+The target-batch service is new, was started from the canonical checkout,
+and reproduces the same token-ID digest after the promotion.
+
+Both services hold the same weights, so together they hold about 46 GiB of
+MLX state. The wired limit is 115.45 GiB, so both fit.
+
 ## Durable probe
 
 Added `scripts/local27_target_batch_probe.py` with:
