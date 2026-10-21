@@ -245,6 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lora-alpha", type=float, default=16.0)
     parser.add_argument("--qat-mxfp4", action="store_true")
     parser.add_argument(
+        "--gradient-checkpointing",
+        action="store_true",
+        help="Rematerialize the native MTP forward during backward.",
+    )
+    parser.add_argument(
         "--fp16-initial-scale",
         type=float,
         default=65536.0,
@@ -292,6 +297,7 @@ def run(arguments: argparse.Namespace) -> int:
     replaced = install_lora(
         model, arguments.lora_rank, arguments.lora_alpha, arguments.qat_mxfp4
     )
+    model.gradient_checkpointing = arguments.gradient_checkpointing
     optimizer = torch.optim.AdamW(
         [parameter for parameter in model.parameters() if parameter.requires_grad],
         lr=arguments.learning_rate,
@@ -392,6 +398,7 @@ def run(arguments: argparse.Namespace) -> int:
         "steps": step,
         "stopped_by_step_cap": stopped_by_step_cap,
         "qat_mxfp4": arguments.qat_mxfp4,
+        "gradient_checkpointing": arguments.gradient_checkpointing,
         "fp16_initial_scale": arguments.fp16_initial_scale,
         "final_loss_scale": float(scaler.get_scale()),
         "overflow_count": overflow_count,

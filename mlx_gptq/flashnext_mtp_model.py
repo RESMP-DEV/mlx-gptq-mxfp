@@ -14,6 +14,7 @@ from typing import Any, cast
 
 import torch
 from safetensors.torch import load_file
+from torch.utils.checkpoint import checkpoint
 from transformers import AutoConfig
 from transformers.models.qwen4_exp.modeling_qwen4_exp import (
     Qwen4ExpTextAttention,
@@ -58,6 +59,7 @@ class FlashNextMTP(torch.nn.Module):
         self.token_embedding = torch.nn.Embedding(text.vocab_size, text.hidden_size)
         self.lm_head = torch.nn.Linear(text.hidden_size, text.vocab_size, bias=False)
         self.qat_mxfp4 = False
+        self.gradient_checkpointing = False
 
     @classmethod
     def from_checkpoint(
@@ -132,7 +134,7 @@ class FlashNextMTP(torch.nn.Module):
             return module(input)
         return self._linear(input, cast(torch.nn.Linear, module))
 
-    def forward(
+    def _forward(
         self,
         residual: torch.Tensor,
         input_tokens: torch.Tensor,
@@ -199,6 +201,22 @@ class FlashNextMTP(torch.nn.Module):
 
         sample = self.hyper_connection_mixer(hyper)
         return self._linear(sample, self.lm_head)
+
+    def forward(
+        self,
+        residual: torch.Tensor,
+        input_tokens: torch.Tensor,
+        positions: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if self.gradient_checkpointing and self.training:
+            return checkpoint(
+                self._forward,
+                residual,
+                input_tokens,
+                positions,
+                use_reentrant=False,
+            )
+        return self._forward(residual, input_tokens, positions)
 
     def _position_embeddings(
         self, sample: torch.Tensor, positions: torch.Tensor

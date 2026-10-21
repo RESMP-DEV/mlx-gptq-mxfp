@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from mlx_gptq.flashnext_mtp_model import FlashNextMTP
 from mlx_gptq.flashnext_mtp_train import (
     FlashNextLoRALinear,
     distribution_metrics,
@@ -81,6 +82,20 @@ def test_mtp_batch_preserves_absolute_source_position() -> None:
     assert residual.dtype == torch.bfloat16
     assert tokens.equal(torch.tensor([[795]], dtype=torch.long))
     assert positions.equal(torch.tensor([[511]], dtype=torch.long))
+
+
+def test_gradient_checkpointing_wrapper_propagates_gradients() -> None:
+    model = FlashNextMTP.__new__(FlashNextMTP)
+    torch.nn.Module.__init__(model)
+    model.gradient_checkpointing = True
+    model.training = True
+    model._forward = lambda residual, _tokens, _positions: residual.square().sum()
+    residual = torch.randn(2, requires_grad=True)
+
+    model(residual, torch.zeros(2, dtype=torch.long), torch.zeros(2)).backward()
+
+    assert residual.grad is not None
+    assert torch.allclose(residual.grad, 2 * residual)
 
 
 def test_install_lora_replaces_expected_modules() -> None:
