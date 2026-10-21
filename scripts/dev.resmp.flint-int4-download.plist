@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.resmp.flint-int4-download</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/kearm/mlx-stack/scripts/flint_hf_retry.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>REPO</key>
+    <string>RecursiveSI/flint-int4</string>
+    <key>REVISION</key>
+    <string>3b93f9053b530488405ae9fca51d4900d6ce21f0</string>
+    <key>DEST</key>
+    <string>/Users/kearm/models/RecursiveSI-flint-int4-3b93f9</string>
+    <key>LOG</key>
+    <string>/Users/kearm/mlx-stack/build/flint-int4-hf.log</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/kearm/mlx-stack/build/flint-int4-hf-launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kearm/mlx-stack/build/flint-int4-hf-launchd.log</string>
+</dict>
+</plist>

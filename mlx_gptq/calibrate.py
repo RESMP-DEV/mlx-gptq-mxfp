@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import logging
 import os
 import re
@@ -28,6 +29,21 @@ def build_model(model_path: str, dtype: str, trust_remote_code: bool):
     from accelerate import init_empty_weights
     from transformers import AutoConfig, AutoModelForCausalLM
 
+    from .flint_torch import FlintConfig, FlintForCausalLM
+
+    config_path = os.path.join(model_path, "config.json")
+    if os.path.isfile(config_path):
+        with open(config_path) as handle:
+            config_dict = json.load(handle)
+    else:
+        config = AutoConfig.from_pretrained(
+            model_path, trust_remote_code=trust_remote_code
+        )
+        config_dict = config.to_dict()
+    if config_dict.get("model_type") == "flint":
+        flint_config = FlintConfig.from_dict(config_dict)
+        with init_empty_weights(include_buffers=False):
+            return FlintForCausalLM(flint_config)
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=trust_remote_code)
     config._experts_implementation = "eager"  # force the F.linear expert loop
     torch_dtype = torch.bfloat16 if dtype == "bfloat16" else torch.float16
@@ -101,7 +117,10 @@ def main(argv=None):
         "--mxfp-algorithm",
         default="auto",
         choices=("auto", "groupwise", "safe-scale-search"),
-        help="MXFP GPTQ variant; auto uses safe scale search for MXFP4 and native groupwise GPTQ for MXFP8",
+        help=(
+            "MXFP GPTQ variant; auto uses safe scale search for MXFP4 "
+            "and groupwise GPTQ for MXFP8"
+        ),
     )
     ap.add_argument("--bits", type=int, default=None, choices=SUPPORTED_BITS)
     ap.add_argument("--group-size", type=int, default=None, choices=(32, 64, 128))
@@ -111,7 +130,7 @@ def main(argv=None):
     ap.add_argument(
         "--devices",
         default=None,
-        help="comma-separated, first is the forward device (default: all CUDA, else cpu)",
+        help="comma-separated; first is forward device (default: all CUDA, else cpu)",
     )
     ap.add_argument(
         "--vram-gb",
