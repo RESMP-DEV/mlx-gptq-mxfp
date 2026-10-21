@@ -9,8 +9,10 @@ import time
 
 import mlx.core as mx
 import mlx_lm.server as mlx_server
+from mlx_lm.models.cache import make_prompt_cache
 
 from dflash_mlx.runtime.bundle import load_runtime_bundle
+from dflash_mlx.runtime.loading import load_target_bundle
 from dflash_mlx.runtime.registry import resolve_optional_draft_ref
 from dflash_mlx.server.tool_calls import install_tool_parser
 
@@ -24,6 +26,7 @@ _MLX_LM_SERVER_DEFAULTS: dict[str, object | None] = {
     "prompt_concurrency": 8,
     "prompt_cache_bytes": None,
 }
+
 
 class DFlashModelProvider(mlx_server.ModelProvider):
     def __init__(self, cli_args):
@@ -57,13 +60,18 @@ class DFlashModelProvider(mlx_server.ModelProvider):
             draft_ref = draft_model_path
         else:
             draft_ref = None
-        resolved_draft_ref = resolve_optional_draft_ref(model_ref, draft_ref)
+        target_batch_only = bool(getattr(self.cli_args, "target_batch_only", False))
+        resolved_draft_ref = (
+            None
+            if target_batch_only
+            else resolve_optional_draft_ref(model_ref, draft_ref)
+        )
 
-        if (
-            self.model_key == (model_ref, None, resolved_draft_ref)
-            and self.target_ops is not None
-            and self.draft_backend is not None
-        ):
+        if self.model_key == (
+            model_ref,
+            None,
+            resolved_draft_ref,
+        ) and _runtime_components_ready(self):
             return self.model, self.tokenizer
 
         self.model = None
@@ -76,20 +84,38 @@ class DFlashModelProvider(mlx_server.ModelProvider):
         self.target_meta = None
         self.effective_draft_quant = None
 
-        bundle = load_runtime_bundle(
-            model_ref=model_ref,
-            draft_ref=draft_ref,
-            draft_quant=getattr(self.cli_args, "draft_quant", None) or None,
-            verify_config=self.cli_args.runtime_context.verify,
-        )
-        model = bundle.target_model
-        tokenizer = bundle.tokenizer
-        draft_model = bundle.draft_model
-        draft_backend = bundle.draft_backend
-        target_ops = bundle.target_ops
-        target_meta = dict(getattr(bundle, "target_meta", {}) or {})
-        draft_meta = dict(getattr(bundle, "draft_meta", {}) or {})
-        effective_draft_quant = getattr(bundle, "effective_draft_quant", None)
+        if target_batch_only:
+            bundle = load_target_bundle(
+                model_ref,
+                verify_config=self.cli_args.runtime_context.verify,
+                install_speculative_hooks=False,
+            )
+            model = bundle.model
+            tokenizer = bundle.tokenizer
+            draft_model = None
+            draft_backend = None
+            target_ops = bundle.target_ops
+            target_meta = dict(getattr(bundle, "meta", {}) or {})
+            draft_meta = {"draft_quant_source": "none"}
+            effective_draft_quant = None
+            resolved_model_ref = str(target_meta.get("resolved_model_ref") or model_ref)
+        else:
+            bundle = load_runtime_bundle(
+                model_ref=model_ref,
+                draft_ref=draft_ref,
+                draft_quant=getattr(self.cli_args, "draft_quant", None) or None,
+                verify_config=self.cli_args.runtime_context.verify,
+            )
+            model = bundle.target_model
+            tokenizer = bundle.tokenizer
+            draft_model = bundle.draft_model
+            draft_backend = bundle.draft_backend
+            target_ops = bundle.target_ops
+            target_meta = dict(getattr(bundle, "target_meta", {}) or {})
+            draft_meta = dict(getattr(bundle, "draft_meta", {}) or {})
+            effective_draft_quant = getattr(bundle, "effective_draft_quant", None)
+            resolved_draft_ref = bundle.resolved_draft_ref
+            resolved_model_ref = str(target_meta.get("resolved_model_ref") or model_ref)
 
         if self.cli_args.chat_template:
             tokenizer.chat_template = self.cli_args.chat_template
@@ -118,9 +144,13 @@ class DFlashModelProvider(mlx_server.ModelProvider):
         self.draft_meta = draft_meta
         self.effective_draft_quant = effective_draft_quant
         self.target_ops = target_ops
-        self.model_key = (model_ref, None, bundle.resolved_draft_ref)
+        self.is_batchable = draft_model is None and all(
+            hasattr(cache, "merge") for cache in make_prompt_cache(model)
+        )
+        self.model_key = (resolved_model_ref, None, resolved_draft_ref)
 
         return self.model, self.tokenizer
+
 
 def wait_for_initial_model_load(
     model_provider: DFlashModelProvider,
@@ -147,8 +177,8 @@ def wait_for_initial_model_load(
 
 
 def _runtime_components_ready(model_provider: DFlashModelProvider) -> bool:
-    return (
-        model_provider.model_key is not None
-        and model_provider.target_ops is not None
-        and model_provider.draft_backend is not None
-    )
+    if model_provider.model_key is None or model_provider.target_ops is None:
+        return False
+    if bool(getattr(model_provider.cli_args, "target_batch_only", False)):
+        return model_provider.draft_backend is None
+    return model_provider.draft_backend is not None

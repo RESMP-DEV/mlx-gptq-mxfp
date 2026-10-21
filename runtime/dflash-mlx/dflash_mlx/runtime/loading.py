@@ -128,16 +128,18 @@ def _draft_lm_head_weight_names(model_path: Path) -> list[str]:
         try:
             payload = json.loads(index_path.read_text())
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid draft safetensors index JSON: {index_path}") from exc
+            raise ValueError(
+                f"Invalid draft safetensors index JSON: {index_path}"
+            ) from exc
         if not isinstance(payload, dict):
             raise ValueError(f"Invalid draft safetensors index payload: {index_path}")
         weight_map = payload.get("weight_map")
         if not isinstance(weight_map, dict):
-            raise ValueError(f"Invalid draft safetensors index weight_map: {index_path}")
+            raise ValueError(
+                f"Invalid draft safetensors index weight_map: {index_path}"
+            )
         return sorted(
-            str(name)
-            for name in weight_map
-            if str(name).startswith("lm_head.")
+            str(name) for name in weight_map if str(name).startswith("lm_head.")
         )
     weight_files = sorted(model_path.glob("model*.safetensors"))
     if not weight_files:
@@ -152,9 +154,7 @@ def _draft_lm_head_weight_names(model_path: Path) -> list[str]:
     for path in weight_files:
         with safe_open(str(path), framework="mlx") as handle:
             names.extend(
-                str(name)
-                for name in handle.keys()
-                if str(name).startswith("lm_head.")
+                str(name) for name in handle.keys() if str(name).startswith("lm_head.")
             )
     return sorted(names)
 
@@ -201,27 +201,29 @@ def load_target_bundle(
     lazy: bool = True,
     quantize_kv_cache: bool = False,
     verify_config: VerifyConfig | None = None,
+    install_speculative_hooks: bool = True,
 ) -> LoadedTargetBundle:
     resolved_ref = resolve_model_ref(model_ref, kind="target")
     model, tokenizer, config = load(resolved_ref, lazy=lazy, return_config=True)
     target_ops = resolve_target_ops(model)
     target_family = target_ops.family(model)
     target_capabilities = target_ops.capabilities_for(model)
-    target_ops.install_speculative_hooks(model)
+    if install_speculative_hooks:
+        target_ops.install_speculative_hooks(model)
     meta = {
         "resolved_model_ref": resolved_ref,
         "config": config,
         "quantize_kv_cache": bool(quantize_kv_cache),
         "target_family": target_family,
     }
-    verify_linear_enabled = (
-        bool(target_capabilities.supports_verify_linear)
-        and _verify_enabled_for(verify_config=verify_config)
-    )
+    verify_linear_enabled = bool(
+        target_capabilities.supports_verify_linear
+    ) and _verify_enabled_for(verify_config=verify_config)
     meta["verify_linear_enabled"] = bool(verify_linear_enabled)
-    meta["verify_mode"] = (verify_config.mode if verify_config is not None else "env")
+    meta["verify_mode"] = verify_config.mode if verify_config is not None else "env"
     if verify_linear_enabled:
         from dflash_mlx.verify_linear import install_verify_linears
+
         n_swapped = install_verify_linears(
             model,
             enable_qmm=_verify_qmm_enabled(verify_config),
@@ -303,6 +305,7 @@ def load_draft_bundle(
                 install_verify_linears,
                 prewarm_verify_kernels,
             )
+
             install_verify_linears(model, enable_qmm=True)
             prewarm_verify_kernels(
                 model,
@@ -311,7 +314,9 @@ def load_draft_bundle(
     else:
         draft_load_dtype = None
     return model, {
-        "resolved_model_ref": str(model_ref) if model_ref is not None else str(resolved_ref),
+        "resolved_model_ref": str(model_ref)
+        if model_ref is not None
+        else str(resolved_ref),
         "config": config,
         "draft_load_dtype": _dtype_name(draft_load_dtype),
         "draft_load_dtype_source": (

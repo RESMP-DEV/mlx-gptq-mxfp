@@ -27,6 +27,7 @@ provenance and non-claims is not accepted.
 | Full projection matrix | Dominant activation/GEMM cases qualified; all weights qualified | Extend only when a missing shape owns measured time |
 | Local 27B CCR fallback | Calibrated MXFP4 loopback server qualified at 32 short-context requests | Promote only through source-policy review and idle listener restart |
 | Batched MTP serving | Portable confidence-row, admission, acceptance, and rollback contracts are implemented; live batching is not wired | Exact serial parity, row independence, rollback equality, prefix-cache equality, and paired concurrency gates |
+| Target-only serving mode | Default-off `--target-batch-only` reached 138.95 aggregate tok/s at 32 x 128 direct requests | Promote only after streaming, exact token-ID, and post-deploy health gates |
 
 ## 2026-10-20 work log
 
@@ -110,6 +111,15 @@ provenance and non-claims is not accepted.
   per-row acceptance contract, rollback grouping, and JSON interop in
   `runtime/dflash-mlx/dflash_mlx/server/serving_contracts.py`. See
   `evidence/2026-10-21-freetoken-serving-and-batched-mtp-architecture.md`.
+- Added default-off target-only continuous batching and repaired the target
+  hook boundary after a real BatchKVCache failure. The isolated mode reached
+  138.95 aggregate completion tok/s for 32 requests x 128 tokens with exact
+  visible greedy-content agreement to the resident serial lane. Added a
+  single-call heterogeneous GDN `rollback_batch` primitive and a durable
+  target-batch health/matrix probe. A compatibility scan started but then
+  stopped a pinned Ornith-1.5-122B BF16 transfer; Ornith is a paused research
+  candidate, not a selected serving model. See
+  `evidence/2026-10-21-target-batch-hardening-and-new-model.md`.
 
 ## Contracts to preserve
 

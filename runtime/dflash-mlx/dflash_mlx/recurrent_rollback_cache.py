@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import mlx.core as mx
 from mlx_lm.models.cache import _BaseCache
 
 from dflash_mlx.kernels import tape_replay_kernel
+
 
 class RecurrentRollbackCache(_BaseCache):
     def __new__(cls, *args, **kwargs):
@@ -50,10 +52,14 @@ class RecurrentRollbackCache(_BaseCache):
                 return lhs
             return mx.concatenate([lhs, rhs])
 
-        self.cache = [cat(lhs, rhs) for lhs, rhs in zip(self.cache, other.cache, strict=True)]
+        self.cache = [
+            cat(lhs, rhs) for lhs, rhs in zip(self.cache, other.cache, strict=True)
+        ]
 
     def extract(self, idx):
-        cache = RecurrentRollbackCache(len(self.cache), conv_kernel_size=self.conv_kernel_size)
+        cache = RecurrentRollbackCache(
+            len(self.cache), conv_kernel_size=self.conv_kernel_size
+        )
         cache.cache = [c[idx : idx + 1] if c is not None else None for c in self.cache]
         return cache
 
@@ -139,6 +145,30 @@ class RecurrentRollbackCache(_BaseCache):
         end = min(start + keep, int(conv_input.shape[1]))
         return mx.contiguous(conv_input[:, start:end, :])
 
+    def _rebuild_conv_state_rows(
+        self, accepted_steps: Sequence[int]
+    ) -> mx.array | None:
+        if self._tape_qkv is None:
+            return self.cache[0]
+        keep = self.conv_kernel_size - 1
+        if keep <= 0:
+            return None
+        conv_state = self._snapshot[0] if self._snapshot is not None else None
+        if conv_state is None:
+            prefix = mx.zeros(
+                (self._tape_qkv.shape[0], keep, self._tape_qkv.shape[-1]),
+                dtype=self._tape_qkv.dtype,
+            )
+        else:
+            prefix = conv_state
+        conv_input = mx.concatenate([prefix, self._tape_qkv], axis=1)
+        rows = []
+        for row, steps in enumerate(accepted_steps):
+            start = int(steps)
+            end = min(start + keep, int(conv_input.shape[1]))
+            rows.append(conv_input[row : row + 1, start:end, :])
+        return mx.contiguous(mx.concatenate(rows, axis=0))
+
     def rollback(self, n_accepted: int) -> None:
         if self._snapshot is None:
             self.clear_transients()
@@ -162,4 +192,41 @@ class RecurrentRollbackCache(_BaseCache):
             self.cache[1] = state
             self.cache[0] = self._rebuild_conv_state(accepted_steps)
 
+        self.clear_transients()
+
+    def rollback_batch(self, n_accepted: Sequence[int]) -> None:
+        """Roll rows back to different accepted prefix lengths in one replay."""
+        if self._snapshot is None:
+            self.clear_transients()
+            return
+        if self._tape is None:
+            self.rollback(min(n_accepted) if n_accepted else 0)
+            return
+
+        batch = int(self._tape.shape[0])
+        steps = int(self._tape.shape[1])
+        if len(n_accepted) != batch:
+            raise ValueError(
+                f"rollback batch mismatch: {len(n_accepted)} rows for {batch}"
+            )
+        accepted = tuple(int(value) for value in n_accepted)
+        if any(value < 0 or value >= steps for value in accepted):
+            raise ValueError("rollback acceptance outside tape extent")
+
+        self.cache = list(self._snapshot)
+        if self._tape_k is None or self._tape_g is None or self.cache[1] is None:
+            self.clear_transients()
+            return
+
+        positions = mx.arange(steps)
+        replay_counts = mx.array([value + 1 for value in accepted])
+        mask = positions[None, :] < replay_counts[:, None]
+        self.cache[1] = tape_replay_kernel(
+            self._tape,
+            self._tape_k,
+            self._tape_g,
+            self.cache[1],
+            mask,
+        )
+        self.cache[0] = self._rebuild_conv_state_rows([value + 1 for value in accepted])
         self.clear_transients()

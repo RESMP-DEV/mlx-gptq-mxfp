@@ -30,6 +30,7 @@ from dflash_mlx.runtime.config import (
 )
 from dflash_mlx.runtime.context import build_runtime_context
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="DFlash Server.")
     add_runtime_config_arguments(parser)
@@ -112,7 +113,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force the tokenizer default chat template.",
     )
-    parser.add_argument("--temp", type=float, default=0.0, help="Default request temperature.")
+    parser.add_argument(
+        "--temp", type=float, default=0.0, help="Default request temperature."
+    )
     parser.add_argument(
         "--top-p",
         type=float,
@@ -138,12 +141,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Default max generated tokens per request.",
     )
     parser.add_argument(
+        "--decode-concurrency",
+        type=int,
+        default=32,
+        help="Target-only batch decode row count.",
+    )
+    parser.add_argument(
+        "--prompt-concurrency",
+        type=int,
+        default=8,
+        help="Target-only batch prompt row count.",
+    )
+    parser.add_argument(
         "--fastpath-max-tokens",
         type=int,
         default=0,
         help=(
             "Use target-only AR for requests with max_tokens <= this threshold. "
             "Default: 0 (disabled); set a positive value to enable."
+        ),
+    )
+    parser.add_argument(
+        "--target-batch-only",
+        action="store_true",
+        default=False,
+        help=(
+            "Load only the target model and use MLX-LM continuous batching. "
+            "This mode disables DFlash speculative serving for the process."
         ),
     )
     parser.add_argument(
@@ -166,18 +190,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+
 def normalize_cli_args(args: argparse.Namespace) -> argparse.Namespace:
     _normalize_chat_template_args(args)
     if args.fastpath_max_tokens < 0:
         raise SystemExit("--fastpath-max-tokens must be >= 0")
+    if args.decode_concurrency <= 0 or args.prompt_concurrency <= 0:
+        raise SystemExit("--decode-concurrency and --prompt-concurrency must be > 0")
+    if args.target_batch_only and args.draft_model:
+        raise SystemExit("--target-batch-only cannot be combined with --draft-model")
+    if args.target_batch_only:
+        args.prefix_cache = False
+        args.prefix_cache_l2 = False
     diagnostics_dir = _configure_diagnostics_args(args)
     try:
         runtime_config = resolve_runtime_config(args)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     if runtime_config.target_fa_window > 0 and (
-        args.prefix_cache is not False
-        or args.prefix_cache_l2 is True
+        args.prefix_cache is not False or args.prefix_cache_l2 is True
     ):
         sys.stderr.write(
             "[dflash] warning: target FA window disables prefix cache and L2 snapshots\n"
@@ -191,6 +222,7 @@ def normalize_cli_args(args: argparse.Namespace) -> argparse.Namespace:
     args.runtime_context = build_runtime_context(runtime_config, diagnostics_config)
     args.prefill_step_size = runtime_config.prefill_step_size
     return args
+
 
 def _normalize_chat_template_args(args: argparse.Namespace) -> None:
     raw_args = getattr(args, "chat_template_args", None)
@@ -208,6 +240,7 @@ def _normalize_chat_template_args(args: argparse.Namespace) -> None:
     args.chat_template_args = dict(chat_args)
     if getattr(args, "enable_thinking", False):
         args.chat_template_args["enable_thinking"] = True
+
 
 def _configure_diagnostics_args(args: argparse.Namespace) -> os.PathLike[str] | None:
     mode = str(getattr(args, "diagnostics", "off") or "off")
@@ -231,6 +264,7 @@ def _configure_diagnostics_args(args: argparse.Namespace) -> os.PathLike[str] | 
         (run_dir / "cycle_events.jsonl").touch()
     return run_dir
 
+
 def _build_diagnostics_config(
     args: argparse.Namespace,
     diagnostics_dir: os.PathLike[str] | None,
@@ -246,6 +280,7 @@ def _build_diagnostics_config(
         memory_waterfall=bool(getattr(args, "memory_waterfall", None)),
         trace=TraceConfig(log_dir=trace_dir, cycle_events=cycle_events),
     )
+
 
 def _write_diagnostics_bootstrap(
     args: argparse.Namespace,
@@ -275,7 +310,7 @@ def _write_diagnostics_bootstrap(
         {
             "argv": list(sys.argv),
             "cwd": os.getcwd(),
-        "diagnostics": diagnostics_meta,
+            "diagnostics": diagnostics_meta,
         },
     )
     write_json(Path(path) / "effective_config.json", effective)
@@ -301,6 +336,7 @@ def _write_diagnostics_bootstrap(
         )
     (Path(path) / "summary.md").write_text("\n".join(summary) + "\n")
 
+
 def configure_metal_limits(args: argparse.Namespace) -> MetalLimitConfig:
     limits = apply_metal_limits(
         wired_request=getattr(args, "wired_limit", "auto"),
@@ -309,11 +345,13 @@ def configure_metal_limits(args: argparse.Namespace) -> MetalLimitConfig:
     args.metal_limits = limits
     return limits
 
+
 def _resolve_default_cache_limit(args: argparse.Namespace) -> MemoryLimit:
     explicit = getattr(args, "cache_limit", None)
     if explicit is not None:
         return explicit
     return 4 * GiB
+
 
 def configure_logging(log_level: str) -> None:
     logging.basicConfig(

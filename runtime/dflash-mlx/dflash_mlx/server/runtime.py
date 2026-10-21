@@ -278,7 +278,9 @@ class ServerRuntime:
                 self.shutdown()
 
 
-def build_prompt_regime(args: Any, tokenizer: Any, request: Any = None) -> dict[str, object]:
+def build_prompt_regime(
+    args: Any, tokenizer: Any, request: Any = None
+) -> dict[str, object]:
     chat_template_args = getattr(args, "chat_template_args", None)
     if not isinstance(chat_template_args, dict):
         chat_template_args = {}
@@ -292,7 +294,9 @@ def build_prompt_regime(args: Any, tokenizer: Any, request: Any = None) -> dict[
         "request_type": request_type or "unknown",
         "request_tokenization": "mlx_lm.server",
         "runtime_prompt_input": "prompt_tokens_override",
-        "chat_template": bool(is_chat and getattr(tokenizer, "has_chat_template", False)),
+        "chat_template": bool(
+            is_chat and getattr(tokenizer, "has_chat_template", False)
+        ),
         "chat_template_args": dict(chat_template_args) if is_chat else {},
         "enable_thinking": bool(is_chat and enable_thinking),
         "use_default_chat_template": bool(
@@ -304,7 +308,7 @@ def build_prompt_regime(args: Any, tokenizer: Any, request: Any = None) -> dict[
 
 
 def _bytes_to_gib(value: int) -> str:
-    return f"{float(value) / (1024 ** 3):.1f} GiB"
+    return f"{float(value) / (1024**3):.1f} GiB"
 
 
 def _format_limit_request(value: Any) -> str:
@@ -319,7 +323,9 @@ def _format_metal_limit(
     bytes_value: int | None,
     applied: bool,
 ) -> str:
-    action = _bytes_to_gib(bytes_value) if applied and bytes_value is not None else "not set"
+    action = (
+        _bytes_to_gib(bytes_value) if applied and bytes_value is not None else "not set"
+    )
     return f"{label}: {_format_limit_request(request)} -> {action}"
 
 
@@ -336,8 +342,21 @@ def _print_startup_banner(
         target_ref = model_provider.model_key[0]
         draft_ref = model_provider.model_key[2]
     target_ref = target_ref or model_provider.cli_args.model or "unknown"
+    if bool(getattr(model_provider.cli_args, "target_batch_only", False)):
+        _write_startup_banner(
+            [
+                f"DFlash v{version} - target-only continuous batching",
+                f"Target:       {target_ref}",
+                "Draft:        none (process-local DFlash disabled)",
+                "Mode:         MLX-LM target batch",
+                f"Server:       {mlx_server.__name__} on port {port}",
+            ]
+        )
+        return
     if not draft_ref:
-        raise RuntimeError("DFlash server requires a resolved draft model before startup.")
+        raise RuntimeError(
+            "DFlash server requires a resolved draft model before startup."
+        )
 
     if model_provider.cli_args.draft_model:
         draft_suffix = " (explicit)"
@@ -366,7 +385,9 @@ def _print_startup_banner(
     target_fa_window = (
         int(runtime_config.target_fa_window) if runtime_config is not None else 0
     )
-    pc_enabled = bool(runtime_config.prefix_cache) if runtime_config is not None else False
+    pc_enabled = (
+        bool(runtime_config.prefix_cache) if runtime_config is not None else False
+    )
     if target_fa_window > 0:
         pc_status = "disabled (--target-fa-window)"
     else:
@@ -399,11 +420,15 @@ def _print_startup_banner(
             if runtime_config.prefix_cache_l2
             else "off"
         )
-        diagnostics_config = getattr(model_provider.cli_args, "diagnostics_config", None)
+        diagnostics_config = getattr(
+            model_provider.cli_args, "diagnostics_config", None
+        )
         trace_config = getattr(diagnostics_config, "trace", None)
         trace_log_dir = getattr(trace_config, "log_dir", None)
         diagnostics_mode = getattr(model_provider.cli_args, "diagnostics", "off")
-        diagnostics_dir = getattr(model_provider.cli_args, "diagnostics_dir_resolved", "")
+        diagnostics_dir = getattr(
+            model_provider.cli_args, "diagnostics_dir_resolved", ""
+        )
         diagnostics_display = diagnostics_dir or (
             str(trace_log_dir) if diagnostics_mode == "off" and trace_log_dir else "off"
         )
@@ -459,6 +484,10 @@ def _print_startup_banner(
                 ]
             )
 
+    _write_startup_banner(raw_lines)
+
+
+def _write_startup_banner(raw_lines: list[str]) -> None:
     width = max(len(line) for line in raw_lines)
     use_color = sys.stderr.isatty()
     reset = "\033[0m" if use_color else ""

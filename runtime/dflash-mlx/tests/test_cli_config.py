@@ -41,9 +41,11 @@ _RUNTIME_ENV_KEYS = (
     "DFLASH_QUANTIZE_KV_CACHE",
 )
 
+
 def _clear_runtime_env(monkeypatch):
     for key in _RUNTIME_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
+
 
 def test_serve_cli_wires_runtime_env_flags(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -62,6 +64,7 @@ def test_serve_cli_wires_runtime_env_flags(monkeypatch):
     assert args.runtime_config.prefill_step_size == 4096
     assert args.runtime_config.clear_cache_boundaries is True
 
+
 def test_serve_cli_thinking_uses_tokenizer_default(monkeypatch):
     _clear_runtime_env(monkeypatch)
     parser = build_parser()
@@ -77,6 +80,7 @@ def test_serve_cli_thinking_uses_tokenizer_default(monkeypatch):
     normalize_cli_args(args)
     assert args.chat_template_args["enable_thinking"] is True
 
+
 def test_serve_cli_fastpath_max_tokens_zero_is_accepted(monkeypatch):
     _clear_runtime_env(monkeypatch)
 
@@ -84,6 +88,7 @@ def test_serve_cli_fastpath_max_tokens_zero_is_accepted(monkeypatch):
     normalize_cli_args(args)
 
     assert args.fastpath_max_tokens == 0
+
 
 def test_serve_cli_chat_template_args_can_enable_thinking(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -94,6 +99,7 @@ def test_serve_cli_chat_template_args_can_enable_thinking(monkeypatch):
     normalize_cli_args(args)
 
     assert args.chat_template_args["enable_thinking"] is True
+
 
 @pytest.mark.parametrize(
     "argv",
@@ -141,6 +147,7 @@ def test_model_provider_adds_mlx_lm_server_boundary_defaults(monkeypatch):
             return 1
 
     monkeypatch.setattr(model_provider.mx.distributed, "init", lambda: FakeGroup())
+
     def fake_load_runtime_bundle(**kwargs):
         load_calls.append(kwargs)
         return SimpleNamespace(
@@ -159,7 +166,11 @@ def test_model_provider_adds_mlx_lm_server_boundary_defaults(monkeypatch):
     args = build_parser().parse_args(["--model", "m"])
     normalize_cli_args(args)
 
-    for attr in model_provider._MLX_LM_SERVER_DEFAULTS:
+    injected_defaults = set(model_provider._MLX_LM_SERVER_DEFAULTS) - {
+        "decode_concurrency",
+        "prompt_concurrency",
+    }
+    for attr in injected_defaults:
         assert not hasattr(args, attr)
 
     provider = model_provider.DFlashModelProvider(args)
@@ -189,7 +200,9 @@ def test_model_provider_preserves_dflash_fields_if_parent_preloads(monkeypatch):
         self._model_map = {"default_model": cli_args.model}
         self.load("default_model")
 
-    monkeypatch.setattr(model_provider.mlx_server.ModelProvider, "__init__", fake_parent_init)
+    monkeypatch.setattr(
+        model_provider.mlx_server.ModelProvider, "__init__", fake_parent_init
+    )
     monkeypatch.setattr(
         model_provider,
         "load_runtime_bundle",
@@ -215,7 +228,9 @@ def test_model_provider_preserves_dflash_fields_if_parent_preloads(monkeypatch):
     assert provider.draft_backend is draft_backend
 
 
-def test_model_provider_materialization_failure_does_not_publish_loaded_state(monkeypatch):
+def test_model_provider_materialization_failure_does_not_publish_loaded_state(
+    monkeypatch,
+):
     _clear_runtime_env(monkeypatch)
 
     class FakeGroup:
@@ -281,6 +296,7 @@ def test_wait_for_initial_model_load_requires_complete_runtime_bundle():
             poll_interval_s=0.0,
         )
 
+
 def test_serve_cli_prefill_step_size_is_not_decorative(monkeypatch):
     _clear_runtime_env(monkeypatch)
     monkeypatch.setenv("DFLASH_PREFILL_STEP_SIZE", "8192")
@@ -291,6 +307,7 @@ def test_serve_cli_prefill_step_size_is_not_decorative(monkeypatch):
     args = build_parser().parse_args(["--model", "m", "--prefill-step-size", "2048"])
     normalize_cli_args(args)
     assert args.runtime_config.prefill_step_size == 2048
+
 
 def test_serve_cli_threads_draft_and_verify_runtime_flags(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -315,6 +332,7 @@ def test_serve_cli_threads_draft_and_verify_runtime_flags(monkeypatch):
     assert args.runtime_context.runtime.draft_window_size == 512
     assert args.runtime_context.runtime.verify_len_cap == 8
 
+
 def test_diagnostics_basic_resolves_default_artifact_dir(monkeypatch, tmp_path):
     _clear_runtime_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -335,6 +353,7 @@ def test_diagnostics_basic_resolves_default_artifact_dir(monkeypatch, tmp_path):
     assert (out / "cache_events.jsonl").exists()
     assert not (out / "cycle_events.jsonl").exists()
 
+
 def test_diagnostics_full_enables_memory_and_cycle_log(monkeypatch, tmp_path):
     _clear_runtime_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -352,6 +371,7 @@ def test_diagnostics_full_enables_memory_and_cycle_log(monkeypatch, tmp_path):
     assert args.diagnostics_config.trace.cycle_events is True
     assert (out / "cycle_events.jsonl").exists()
 
+
 def test_diagnostics_off_creates_no_artifact_dir(monkeypatch, tmp_path):
     _clear_runtime_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -363,6 +383,7 @@ def test_diagnostics_off_creates_no_artifact_dir(monkeypatch, tmp_path):
     assert not hasattr(args, "diagnostics_dir_resolved")
     assert args.diagnostics_config.mode == "off"
     assert args.diagnostics_config.trace.log_dir is None
+
 
 def test_diagnostics_dir_override_is_exact(monkeypatch, tmp_path):
     _clear_runtime_env(monkeypatch)
@@ -378,11 +399,14 @@ def test_diagnostics_dir_override_is_exact(monkeypatch, tmp_path):
     assert args.diagnostics_config.trace.log_dir == out
     assert (out / "manifest.json").exists()
 
+
 def test_diagnostics_manifest_contains_required_fields(monkeypatch, tmp_path):
     _clear_runtime_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
 
-    args = build_parser().parse_args(["--model", "m", "--draft", "d", "--diagnostics", "basic"])
+    args = build_parser().parse_args(
+        ["--model", "m", "--draft", "d", "--diagnostics", "basic"]
+    )
     normalize_cli_args(args)
 
     manifest = (Path(args.diagnostics_dir_resolved) / "manifest.json").read_text()
@@ -413,6 +437,7 @@ def test_diagnostics_manifest_contains_required_fields(monkeypatch, tmp_path):
     assert invocation["diagnostics"]["mode"] == "basic"
     assert invocation["diagnostics"]["memory_waterfall"] is False
 
+
 def test_serve_cli_parses_memory_limit_flags():
     args = build_parser().parse_args(
         ["--model", "m", "--wired-limit", "48GB", "--cache-limit", "8GB"]
@@ -420,9 +445,11 @@ def test_serve_cli_parses_memory_limit_flags():
     assert args.wired_limit == 48 * 1024**3
     assert args.cache_limit == 8 * 1024**3
 
+
 def test_serve_cli_rejects_invalid_memory_limit():
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--model", "m", "--wired-limit", "bad"])
+
 
 def test_serve_cli_parses_prefix_cache_byte_suffixes(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -442,6 +469,7 @@ def test_serve_cli_parses_prefix_cache_byte_suffixes(monkeypatch):
     assert args.runtime_config.prefix_cache_max_bytes == 2 * 1024**3
     assert args.runtime_config.prefix_cache_l2_max_bytes == 50 * 1024**3
 
+
 def test_serve_cli_parses_prefix_cache_byte_suffix_env(monkeypatch):
     _clear_runtime_env(monkeypatch)
     monkeypatch.setenv("DFLASH_PREFIX_CACHE_MAX_BYTES", "2GB")
@@ -452,6 +480,7 @@ def test_serve_cli_parses_prefix_cache_byte_suffix_env(monkeypatch):
 
     assert args.runtime_config.prefix_cache_max_bytes == 2 * 1024**3
     assert args.runtime_config.prefix_cache_l2_max_bytes == 50 * 1024**3
+
 
 def _install_metal_limit_probe(monkeypatch):
     calls = []
@@ -480,6 +509,7 @@ def _install_metal_limit_probe(monkeypatch):
     )
     return calls, recommended
 
+
 def test_configure_metal_limits_uses_bounded_default(monkeypatch):
     calls, recommended = _install_metal_limit_probe(monkeypatch)
 
@@ -491,6 +521,7 @@ def test_configure_metal_limits_uses_bounded_default(monkeypatch):
     assert limits.wired_bytes == recommended
     assert limits.cache_request == 4 * 1024**3
     assert limits.cache_bytes == 4 * 1024**3
+
 
 def test_serve_default_uses_bounded_cache_limit(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -505,6 +536,7 @@ def test_serve_default_uses_bounded_cache_limit(monkeypatch):
     assert limits.cache_request == 4 * 1024**3
     assert limits.cache_bytes == 4 * 1024**3
 
+
 def test_explicit_auto_cache_limit_overrides_serve_default(monkeypatch):
     _clear_runtime_env(monkeypatch)
     calls, recommended = _install_metal_limit_probe(monkeypatch)
@@ -516,6 +548,7 @@ def test_explicit_auto_cache_limit_overrides_serve_default(monkeypatch):
     assert calls == [("wired", recommended), ("cache", recommended // 4)]
     assert limits.cache_request == "auto"
     assert limits.cache_bytes == recommended // 4
+
 
 def test_explicit_none_cache_limit_overrides_serve_default(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -530,6 +563,7 @@ def test_explicit_none_cache_limit_overrides_serve_default(monkeypatch):
     assert limits.cache_bytes is None
     assert limits.cache_applied is False
 
+
 def test_explicit_byte_cache_limit_overrides_serve_default(monkeypatch):
     _clear_runtime_env(monkeypatch)
     calls, recommended = _install_metal_limit_probe(monkeypatch)
@@ -541,6 +575,7 @@ def test_explicit_byte_cache_limit_overrides_serve_default(monkeypatch):
     assert calls == [("wired", recommended), ("cache", 8 * 1024**3)]
     assert limits.cache_request == 8 * 1024**3
     assert limits.cache_bytes == 8 * 1024**3
+
 
 def test_configure_metal_limits_supports_none_and_explicit_cache(monkeypatch):
     calls, _recommended = _install_metal_limit_probe(monkeypatch)
@@ -686,6 +721,7 @@ def test_startup_banner_prints_resolved_metal_limits(monkeypatch, capsys):
     assert "Thinking:     disabled" in err
     assert "Fast path:    AR <= 64 tokens" in err
 
+
 @pytest.mark.parametrize(
     "argv,error",
     [
@@ -705,6 +741,7 @@ def test_serve_cli_rejects_invalid_runtime_flags(argv, error):
     with pytest.raises(SystemExit, match=error):
         normalize_cli_args(args)
 
+
 def test_serve_default_sets_product_runtime(monkeypatch):
     _clear_runtime_env(monkeypatch)
     args = build_parser().parse_args(["--model", "m"])
@@ -723,11 +760,13 @@ def test_serve_default_sets_product_runtime(monkeypatch):
     assert cfg.prefix_cache_l2 is True
     assert cfg.verify_mode == "adaptive"
 
+
 def test_cli_explicit_overrides_default_runtime(monkeypatch):
     _clear_runtime_env(monkeypatch)
     args = build_parser().parse_args(["--model", "m", "--prefill-step-size", "2048"])
     normalize_cli_args(args)
     assert args.runtime_config.prefill_step_size == 2048
+
 
 def test_env_overrides_default_runtime(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -740,12 +779,14 @@ def test_env_overrides_default_runtime(monkeypatch):
     assert args.runtime_config.draft_window_size == 512
     assert args.runtime_config.verify_len_cap == 4
 
+
 def test_cli_overrides_env(monkeypatch):
     _clear_runtime_env(monkeypatch)
     monkeypatch.setenv("DFLASH_PREFILL_STEP_SIZE", "1024")
     args = build_parser().parse_args(["--model", "m", "--prefill-step-size", "8192"])
     normalize_cli_args(args)
     assert args.runtime_config.prefill_step_size == 8192
+
 
 def test_verify_mode_off_disables_custom_verify(monkeypatch):
     _clear_runtime_env(monkeypatch)
@@ -756,10 +797,14 @@ def test_verify_mode_off_disables_custom_verify(monkeypatch):
     assert args.runtime_config.verify_mode == "off"
     assert args.runtime_context.verify.mode == "off"
 
+
 @pytest.mark.parametrize(
     "argv,error",
     [
-        (["--model", "m", "--prefix-cache-max-entries", "0"], "prefix_cache_max_entries"),
+        (
+            ["--model", "m", "--prefix-cache-max-entries", "0"],
+            "prefix_cache_max_entries",
+        ),
         (["--model", "m", "--prefix-cache-max-bytes", "-1"], "prefix_cache_max_bytes"),
         (["--model", "m", "--max-snapshot-tokens", "-1"], "max_snapshot_tokens"),
         (
@@ -773,6 +818,7 @@ def test_runtime_validation_errors(argv, error):
     with pytest.raises(SystemExit, match=error):
         normalize_cli_args(args)
 
+
 def test_target_fa_window_disables_prefix_cache(monkeypatch):
     _clear_runtime_env(monkeypatch)
     args = build_parser().parse_args(["--model", "m", "--target-fa-window", "2048"])
@@ -780,6 +826,7 @@ def test_target_fa_window_disables_prefix_cache(monkeypatch):
     assert args.runtime_config.target_fa_window == 2048
     assert args.runtime_config.prefix_cache is False
     assert args.runtime_config.prefix_cache_l2 is False
+
 
 def test_prefix_cache_disabled_disables_l2(monkeypatch):
     _clear_runtime_env(monkeypatch)

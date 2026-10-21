@@ -32,7 +32,6 @@ from dflash_mlx.engine.events import PrefillCompleteEvent, SummaryEvent
 from dflash_mlx.observability.memory import live_memory_payload
 from dflash_mlx.server.prefix_cache_manager import (
     build_prefix_key,
-    build_runtime_cache_identity,
 )
 
 _LIVE_LOCK = threading.Lock()
@@ -76,6 +75,7 @@ _LIVE_TOTALS: dict[str, Any] = {
     "cache_hits": 0,
     "cache_misses": 0,
 }
+
 
 @dataclass(frozen=True)
 class _RequestAccounting:
@@ -184,9 +184,13 @@ class _RequestAccounting:
             if summary_event is not None
             else live_token_count
         )
-        acceptance_ratio = float(summary_event.acceptance_ratio if summary_event else 0.0)
+        acceptance_ratio = float(
+            summary_event.acceptance_ratio if summary_event else 0.0
+        )
         cycles_completed = int(summary_event.cycles_completed if summary_event else 0)
-        tokens_per_cycle = float(summary_event.tokens_per_cycle if summary_event else 0.0)
+        tokens_per_cycle = float(
+            summary_event.tokens_per_cycle if summary_event else 0.0
+        )
         adaptive_block_reductions = int(
             summary_event.adaptive_block_reductions if summary_event else 0
         )
@@ -278,7 +282,9 @@ class _RequestAccounting:
             ),
             prefill_accounting=dict(prefill_accounting),
             prefill_phase_timings_us=dict(prefill_phase_timings_us),
-            phase_timings_us=dict(summary_event.phase_timings_us if summary_event else {}),
+            phase_timings_us=dict(
+                summary_event.phase_timings_us if summary_event else {}
+            ),
             cycle_profile_totals_us=cycle_profile_totals_us,
             runtime_config=runtime_config_payload,
             memory_waterfall_peak=dict(memory_waterfall_peak or {}),
@@ -288,15 +294,21 @@ class _RequestAccounting:
 
     @property
     def physical_prefill_tokens(self) -> Optional[int]:
-        return _int_or_none((self.prefill_accounting or {}).get("physical_prefill_tokens"))
+        return _int_or_none(
+            (self.prefill_accounting or {}).get("physical_prefill_tokens")
+        )
 
     @property
     def restored_prefill_tokens(self) -> Optional[int]:
-        return _int_or_none((self.prefill_accounting or {}).get("prefill_tokens_restored"))
+        return _int_or_none(
+            (self.prefill_accounting or {}).get("prefill_tokens_restored")
+        )
 
     @property
     def computed_prefill_tokens(self) -> Optional[int]:
-        return _int_or_none((self.prefill_accounting or {}).get("prefill_tokens_computed"))
+        return _int_or_none(
+            (self.prefill_accounting or {}).get("prefill_tokens_computed")
+        )
 
     @property
     def prefix_cache_enabled(self) -> bool:
@@ -396,6 +408,7 @@ class _RequestAccounting:
         )
         return payload
 
+
 def configure_live_metrics(
     *,
     version: str,
@@ -404,8 +417,12 @@ def configure_live_metrics(
     cli_args = model_provider.cli_args
     runtime_config = getattr(cli_args, "runtime_config", None)
     model_key = getattr(model_provider, "model_key", None) or ()
-    target_ref = model_key[0] if len(model_key) > 0 else getattr(cli_args, "model", None)
-    draft_ref = model_key[2] if len(model_key) > 2 else getattr(cli_args, "draft_model", None)
+    target_ref = (
+        model_key[0] if len(model_key) > 0 else getattr(cli_args, "model", None)
+    )
+    draft_ref = (
+        model_key[2] if len(model_key) > 2 else getattr(cli_args, "draft_model", None)
+    )
     draft_meta = getattr(model_provider, "draft_meta", {}) or {}
     target_meta = getattr(model_provider, "target_meta", {}) or {}
     target_fa_window = _int_or_none(getattr(runtime_config, "target_fa_window", None))
@@ -415,14 +432,17 @@ def configure_live_metrics(
         and int(target_fa_window or 0) <= 0
     )
     runtime_context = getattr(cli_args, "runtime_context", None)
-    cache_identity: Any = (
-        build_runtime_cache_identity(model_provider)
-        if runtime_context is not None
-        else tuple(model_key)
-    )
     draft_model = getattr(model_provider, "draft_model", None)
-    if prefix_cache_enabled and runtime_context is not None and draft_model is not None:
+    if runtime_context is None:
+        cache_identity: Any = tuple(model_key)
+    elif prefix_cache_enabled and draft_model is not None:
         cache_identity = build_prefix_key(model_provider, draft_model, runtime_context)
+    else:
+        cache_identity = (
+            (str(model_key[0]), str(model_key[2]))
+            if isinstance(model_key, (list, tuple)) and len(model_key) >= 3
+            else tuple(model_key)
+        )
     sync_runtime_cache_manager(runtime_context, cache_identity=cache_identity)
     metal_limits = getattr(cli_args, "metal_limits", None)
     with _LIVE_LOCK:
@@ -437,7 +457,11 @@ def configure_live_metrics(
                 "draft_quant_source": draft_meta.get("draft_quant_source"),
                 "draft_load_dtype": draft_meta.get("draft_load_dtype"),
                 "draft_load_dtype_source": draft_meta.get("draft_load_dtype_source"),
-                "mode": "dflash",
+                "mode": (
+                    "target_batch"
+                    if bool(getattr(cli_args, "target_batch_only", False))
+                    else "dflash"
+                ),
             }
         )
         _LIVE_RUNTIME.update(
@@ -470,6 +494,7 @@ def configure_live_metrics(
                 ),
             }
         )
+
 
 def get_live_metrics_payload() -> dict[str, Any]:
     prefix_cache_manager = current_runtime_cache_manager()
@@ -515,6 +540,7 @@ def get_live_metrics_payload() -> dict[str, Any]:
     payload["totals"].update(live_prefix_cache_totals(raw_prefix_stats))
     return payload
 
+
 def start_live_request(
     *,
     request_id: int,
@@ -559,6 +585,7 @@ def start_live_request(
     with _LIVE_LOCK:
         global _LIVE_CURRENT_REQUEST
         _LIVE_CURRENT_REQUEST = current
+
 
 def update_live_request(
     *,
@@ -626,14 +653,15 @@ def update_live_request(
         if phase_timings_us is not None:
             current["phase_timings_us"] = dict(phase_timings_us)
 
+
 def clear_live_request(*, request_id: int) -> None:
     with _LIVE_LOCK:
         global _LIVE_CURRENT_REQUEST
-        if (
-            _LIVE_CURRENT_REQUEST is not None
-            and int(_LIVE_CURRENT_REQUEST.get("request_id", -1)) == int(request_id)
-        ):
+        if _LIVE_CURRENT_REQUEST is not None and int(
+            _LIVE_CURRENT_REQUEST.get("request_id", -1)
+        ) == int(request_id):
             _LIVE_CURRENT_REQUEST = None
+
 
 def record_target_only_request(
     *,
@@ -655,6 +683,7 @@ def record_target_only_request(
         **accounting.post_event_payload(),
     )
 
+
 def record_cycle_diagnostic(
     *,
     diagnostics: Optional[DiagnosticsConfig],
@@ -666,6 +695,7 @@ def record_cycle_diagnostic(
         request_id=request_id,
         **fields,
     )
+
 
 def finalize_request_observability(
     *,
@@ -716,6 +746,7 @@ def finalize_request_observability(
     _record_request_accounting(accounting, diagnostics=diagnostics)
     write_post_request_memory_line(request_id=request_id)
 
+
 def _reset_live_metrics_state() -> None:
     with _LIVE_LOCK:
         global _LIVE_STARTED_AT, _LIVE_LAST_REQUEST, _LIVE_CURRENT_REQUEST
@@ -747,6 +778,7 @@ def _reset_live_metrics_state() -> None:
         _LIVE_LAST_PREFIX.update({"restored": None, "computed": None})
         for key in _LIVE_TOTALS:
             _LIVE_TOTALS[key] = 0.0 if key == "decode_s" else 0
+
 
 def _write_summary_line_from_accounting(accounting: _RequestAccounting) -> None:
     generation_tokens = int(accounting.generated_tokens or 0)
@@ -819,6 +851,7 @@ def write_post_request_memory_line(*, request_id: int) -> None:
         f"untracked={_fmt_gb_value(untracked_gb)} GB\n"
     )
 
+
 def _write_observability_line(line: str) -> None:
     try:
         sys.stderr.write(line)
@@ -845,6 +878,7 @@ def _record_request_accounting(
         **accounting.post_event_payload(),
     )
     _append_diagnostics_summary(accounting=accounting, diagnostics=diagnostics)
+
 
 def _append_diagnostics_summary(
     *,
@@ -884,15 +918,22 @@ def _append_diagnostics_summary(
     except OSError as exc:
         report_observability_failure("diagnostics summary append failed", exc)
 
-def _prefill_phase_timings(prefill_event: Optional[PrefillCompleteEvent]) -> dict[str, float]:
+
+def _prefill_phase_timings(
+    prefill_event: Optional[PrefillCompleteEvent],
+) -> dict[str, float]:
     if not prefill_event:
         return {}
     return prefill_event.phase_timings()
 
-def _prefill_accounting(prefill_event: Optional[PrefillCompleteEvent]) -> dict[str, int]:
+
+def _prefill_accounting(
+    prefill_event: Optional[PrefillCompleteEvent],
+) -> dict[str, int]:
     if not prefill_event:
         return {}
     return prefill_event.accounting()
+
 
 def _runtime_config_payload(runtime_config: Optional[Any]) -> dict[str, Any]:
     if runtime_config is None:
@@ -915,6 +956,7 @@ def _runtime_config_payload(runtime_config: Optional[Any]) -> dict[str, Any]:
         if hasattr(runtime_config, key):
             payload[key] = getattr(runtime_config, key)
     return payload
+
 
 def _record_live_accounting(accounting: _RequestAccounting) -> None:
     last_request = accounting.last_request_payload()
@@ -950,16 +992,17 @@ def _record_live_accounting(accounting: _RequestAccounting) -> None:
                 _LIVE_TOTALS["cache_misses"] += 1
         _finish_live_request_unlocked(last_request)
 
+
 def _finish_live_request_unlocked(last_request: dict[str, Any]) -> None:
     global _LIVE_LAST_REQUEST, _LIVE_CURRENT_REQUEST
     _LIVE_LAST_REQUEST = dict(last_request)
     _LIVE_RECENT_REQUESTS.append(dict(last_request))
     _LIVE_REQUEST_FINISH_TIMES.append(time.time())
-    if (
-        _LIVE_CURRENT_REQUEST is not None
-        and _LIVE_CURRENT_REQUEST.get("request_id") == last_request.get("request_id")
-    ):
+    if _LIVE_CURRENT_REQUEST is not None and _LIVE_CURRENT_REQUEST.get(
+        "request_id"
+    ) == last_request.get("request_id"):
         _LIVE_CURRENT_REQUEST = None
+
 
 def _rates_payload(
     *,
@@ -1000,6 +1043,7 @@ def _rates_payload(
         ),
     }
 
+
 def _current_request_payload(
     current: Optional[dict[str, Any]],
     now: float,
@@ -1009,14 +1053,13 @@ def _current_request_payload(
     started_at = float(current.get("_started_at", now) or now)
     prefill_done_at = current.get("_prefill_done_at")
     payload = {
-        key: value
-        for key, value in current.items()
-        if not str(key).startswith("_")
+        key: value for key, value in current.items() if not str(key).startswith("_")
     }
     payload["elapsed_s"] = max(0.0, now - started_at)
     if prefill_done_at is not None:
         payload["decode_s"] = max(0.0, now - float(prefill_done_at))
     return payload
+
 
 def _last_request_payload(
     *,
@@ -1079,7 +1122,10 @@ def _last_request_payload(
         "phase_timings_us": dict(phase_timings_us or {}),
     }
 
-def _prefix_cache_stats(prefix_cache_manager: Optional[Any]) -> Optional[dict[str, Any]]:
+
+def _prefix_cache_stats(
+    prefix_cache_manager: Optional[Any],
+) -> Optional[dict[str, Any]]:
     if prefix_cache_manager is None:
         return None
     try:
@@ -1087,21 +1133,26 @@ def _prefix_cache_stats(prefix_cache_manager: Optional[Any]) -> Optional[dict[st
     except RuntimeCacheManagerClosed:
         return None
 
+
 def _memory_payload(metal_limits: dict[str, Any]) -> dict[str, Any]:
     return live_memory_payload(wired_limit_bytes=metal_limits.get("wired_limit_bytes"))
 
+
 def get_memory_snapshot() -> dict[str, Any]:
     return _memory_payload({"wired_limit_bytes": None})
+
 
 def _seconds_or_none(value_ms: Optional[float]) -> Optional[float]:
     if value_ms is None:
         return None
     return float(value_ms) / 1_000.0
 
+
 def _rate(count: int, elapsed_s: float) -> Optional[float]:
     if elapsed_s <= 0.0:
         return None
     return float(count) / float(elapsed_s)
+
 
 def _float_or_none(value: Optional[float]) -> Optional[float]:
     if value is None:
@@ -1111,6 +1162,7 @@ def _float_or_none(value: Optional[float]) -> Optional[float]:
     except (TypeError, ValueError):
         return None
 
+
 def _int_or_none(value: Optional[Any]) -> Optional[int]:
     if value is None:
         return None
@@ -1118,6 +1170,7 @@ def _int_or_none(value: Optional[Any]) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
 
 def _cache_status(cache_hit_tokens: int) -> str:
     return "WARM" if int(cache_hit_tokens) > 0 else "COLD"
@@ -1134,20 +1187,24 @@ def _fmt_ms(value: Optional[float]) -> str:
         return ""
     return f"{float(value):.1f}"
 
+
 def _fmt_int(value: Optional[int]) -> str:
     if value is None:
         return ""
     return str(int(value))
+
 
 def _fmt_float(value: Optional[float]) -> str:
     if value is None:
         return ""
     return f"{float(value):.2f}"
 
+
 def _fmt_gb_value(value: Optional[float]) -> str:
     if value is None:
         return "n/a"
     return f"{float(value):.2f}"
+
 
 def _fmt_float3(value: Optional[float]) -> str:
     if value is None:
