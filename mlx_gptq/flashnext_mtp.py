@@ -258,6 +258,52 @@ class NativeMTPPairDataset(Dataset[dict[str, torch.Tensor]]):
         }
 
 
+class MixedNativeMTPPairDataset(Dataset[dict[str, torch.Tensor]]):
+    """Concatenate several native MTP banks into one mixed training set.
+
+    Every bank keeps its own two-ahead pairing, so mixing never changes a
+    pair's alignment.  The mix is what keeps the head from specializing to a
+    single prompt: a bank drawn from one source contributes only its own
+    share of the rows, so a head that memorizes one bank's residuals pays for
+    it with the rows it did not train on.
+    """
+
+    def __init__(self, banks: list[NativeMTPBank]):
+        if not banks:
+            raise ValueError("a mixed MTP dataset needs at least one bank")
+        self.datasets = [NativeMTPPairDataset(bank) for bank in banks]
+        self.offsets: list[int] = []
+        total = 0
+        for dataset in self.datasets:
+            self.offsets.append(total)
+            total += len(dataset)
+        self.length = total
+
+    def __len__(self) -> int:
+        return self.length
+
+    def bank_index(self, index: int) -> int:
+        """Return the bank that owns a row index."""
+        owner = 0
+        for position, offset in enumerate(self.offsets):
+            if index >= offset:
+                owner = position
+        return owner
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        if not 0 <= index < self.length:
+            raise IndexError(index)
+        owner = self.bank_index(index)
+        offset = self.offsets[owner]
+        record = dict(self.datasets[owner][index - offset])
+        record["bank_index"] = torch.tensor(owner, dtype=torch.long)
+        return record
+
+    def per_bank_counts(self) -> list[int]:
+        """Return the number of pairs each bank contributes."""
+        return [len(dataset) for dataset in self.datasets]
+
+
 def write_training_manifest(
     bank: NativeMTPBank,
     output: Path,

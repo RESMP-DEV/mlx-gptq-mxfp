@@ -7,6 +7,8 @@ import torch
 from mlx_gptq.flashnext_mtp_model import FlashNextMTP
 from mlx_gptq.flashnext_mtp_train import (
     FlashNextLoRALinear,
+    anchor_regularizer,
+    clamped_teacher_probability,
     distribution_metrics,
     export_artifacts,
     install_lora,
@@ -151,3 +153,33 @@ def test_install_lora_replaces_expected_modules() -> None:
         parameter for parameter in model.parameters() if parameter.requires_grad
     ]
     assert len(trainable) == 36
+
+
+def test_confidence_floor_caps_teacher_peakiness() -> None:
+    teacher = torch.tensor([[10.0, 0.0, 0.0, -50.0]])
+    exact = clamped_teacher_probability(teacher, 0.0)
+    assert abs(float(exact.sum()) - 1.0) < 1e-5
+    for floor in (0.5, 0.9, 0.99):
+        floored = clamped_teacher_probability(teacher, floor)
+        assert abs(float(floored.sum()) - 1.0) < 1e-5
+        assert float(floored.max()) <= floor + 1e-6
+        assert int(floored.argmax()) == int(exact.argmax())
+
+
+def test_confidence_floor_does_not_change_a_flat_teacher() -> None:
+    flat = torch.tensor([[1.0, 1.0, 1.0, 1.0]])
+    floored = clamped_teacher_probability(flat, 0.5)
+    assert torch.allclose(floored, torch.full_like(floored, 0.25), atol=1e-6)
+
+
+def test_anchor_regularizer_is_zero_for_identical_distributions() -> None:
+    student = torch.tensor([[1.0, 0.0]])
+    base = torch.tensor([[1.0, 0.0]])
+    assert float(anchor_regularizer(student, base, 1.0)) == 0.0
+    assert float(anchor_regularizer(student, base, 0.0)) == 0.0
+
+
+def test_anchor_regularizer_penalizes_drift() -> None:
+    student = torch.tensor([[0.0, 1.0]])
+    base = torch.tensor([[1.0, 0.0]])
+    assert float(anchor_regularizer(student, base, 1.0)) > 0.0

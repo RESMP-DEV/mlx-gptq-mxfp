@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import random
@@ -14,7 +15,11 @@ import torch
 from safetensors.torch import save_file
 
 from .dflash2_distill import _mxfp4_parameters
-from .flashnext_mtp import NativeMTPBank, NativeMTPPairDataset
+from .flashnext_mtp import (
+    MixedNativeMTPPairDataset,
+    NativeMTPBank,
+    NativeMTPPairDataset,
+)
 from .flashnext_mtp_model import FlashNextMTP
 from .qat import fake_quantize_mxfp4
 
@@ -138,11 +143,60 @@ def distribution_metrics(
     }
 
 
+def clamped_teacher_probability(
+    teacher: torch.Tensor, confidence_floor: float
+) -> torch.Tensor:
+    """Return the teacher distribution with a confidence floor and a clamp.
+
+    A verifier row is one sample of a very peaked distribution.  Training
+    against that peak teaches the head to reproduce one argmax trajectory
+    rather than the teacher's shape, which is what makes a single-prompt fit
+    look far better on its own prompt than on anything else.  A confidence
+    floor keeps at least ``confidence_floor`` of the mass on the top tokens,
+    so the objective is the teacher's shape rather than one point mass, and
+    the clamp bounds the per-token gradient contribution.
+    """
+    logits = teacher.float()
+    top = logits.max(dim=-1, keepdim=True).values
+    # Cap how far any other logit may sit below the top one.  This bounds the
+    # effective distribution support, so one extreme row cannot dominate the
+    # gradient.
+    clamped = logits.clamp(min=top - _LOGIT_CLAMP_RANGE)
+    probabilities = torch.softmax(clamped, dim=-1)
+    if confidence_floor <= 0.0:
+        return probabilities
+    # Flatten the peak by mixing toward the uniform distribution over the
+    # tokens that carry any mass.  A verifier row is one sample of a very
+    # peaked distribution, and training against that peak teaches the head
+    # one argmax trajectory instead of the teacher's shape.  Mixing rather
+    # than redistributing keeps the result a proper distribution.
+    support = (probabilities > 0).to(probabilities.dtype)
+    support_size = support.sum(dim=-1, keepdim=True).clamp(min=1.0)
+    uniform = support / support_size
+    top_probability = probabilities.max(dim=-1, keepdim=True).values
+    # Solve for the uniform mix that puts the top mass exactly at the floor.
+    # With a uniform mass of 1/size, the mixed top mass is
+    #   (1 - m) * top + m / size = floor,
+    # so m = (top - floor) / (top - 1 / size).
+    uniform_top = 1.0 / support_size
+    denominator = (top_probability - uniform_top).clamp(min=1e-12)
+    mix = ((top_probability - confidence_floor) / denominator).clamp(0.0, 1.0)
+    mixed = (1.0 - mix) * probabilities + mix * uniform
+    return mixed / mixed.sum(dim=-1, keepdim=True)
+
+
+_LOGIT_CLAMP_RANGE = 30.0
+
+
 def loss_and_metrics(
-    student: torch.Tensor, teacher: torch.Tensor, ce_weight: float, tv_weight: float
+    student: torch.Tensor,
+    teacher: torch.Tensor,
+    ce_weight: float,
+    tv_weight: float,
+    confidence_floor: float = 0.0,
 ) -> tuple[torch.Tensor, dict[str, float | int]]:
     student_log_prob = torch.log_softmax(student.float(), dim=-1)
-    teacher_prob = torch.softmax(teacher.float(), dim=-1)
+    teacher_prob = clamped_teacher_probability(teacher, confidence_floor)
     student_prob = torch.exp(student_log_prob)
     ce = -(teacher_prob * student_log_prob).sum(dim=-1)
     tv = 0.5 * (teacher_prob - student_prob).abs().sum(dim=-1)
@@ -150,6 +204,23 @@ def loss_and_metrics(
     metrics = distribution_metrics(student, teacher)
     metrics["loss"] = float(loss.detach())
     return loss, metrics
+
+
+def anchor_regularizer(
+    student: torch.Tensor, base: torch.Tensor, weight: float
+) -> torch.Tensor:
+    """Penalize drift from the frozen base distribution.
+
+    The base head is already a good drafter for the target.  Letting the
+    adapter move far from it is what buys a large same-prompt gain and a
+    small held-out gain, so an explicit anchor on the base distribution
+    trades same-prompt fit for held-out fit in a controlled way.
+    """
+    if weight <= 0.0:
+        return student.new_zeros(())
+    student_log_prob = torch.log_softmax(student.float(), dim=-1)
+    base_prob = torch.softmax(base.float(), dim=-1)
+    return (base_prob * (torch.log(base_prob + 1e-30) - student_log_prob)).sum(dim=-1)
 
 
 def start_wandb(arguments: argparse.Namespace, output: Path) -> Any | None:
@@ -228,7 +299,16 @@ def mtp_batch(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True, type=Path)
-    parser.add_argument("--bank", required=True, type=Path)
+    parser.add_argument(
+        "--bank",
+        required=True,
+        type=Path,
+        action="append",
+        help=(
+            "A native MTP teacher bank. Repeat the flag to mix several banks "
+            "into one training set."
+        ),
+    )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--dtype", choices=("bfloat16", "float16"), default="bfloat16")
@@ -255,6 +335,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=65536.0,
         help="Initial dynamic-loss scale for float16 CUDA training.",
     )
+    parser.add_argument(
+        "--confidence-floor",
+        type=float,
+        default=0.0,
+        help=(
+            "Minimum teacher probability mass on the top tokens. 0 keeps the "
+            "exact verifier distribution."
+        ),
+    )
+    parser.add_argument(
+        "--anchor-weight",
+        type=float,
+        default=0.0,
+        help=("Weight on the KL anchor to the frozen base head. 0 disables it."),
+    )
     parser.add_argument("--ce-weight", type=float, default=0.1)
     parser.add_argument("--tv-weight", type=float, default=0.9)
     parser.add_argument("--validation-fraction", type=float, default=0.2)
@@ -275,8 +370,13 @@ def run(arguments: argparse.Namespace) -> int:
     output.mkdir(parents=True, exist_ok=True)
     dtype = getattr(torch, arguments.dtype)
 
-    bank = NativeMTPBank(Path(arguments.bank))
-    dataset = NativeMTPPairDataset(bank)
+    banks = [NativeMTPBank(Path(path)) for path in arguments.bank]
+    bank = banks[0] if len(banks) == 1 else None
+    dataset: Any = (
+        NativeMTPPairDataset(banks[0])
+        if len(banks) == 1
+        else MixedNativeMTPPairDataset(banks)
+    )
     selected = (
         list(range(len(dataset)))
         if arguments.limit <= 0
@@ -297,6 +397,13 @@ def run(arguments: argparse.Namespace) -> int:
     replaced = install_lora(
         model, arguments.lora_rank, arguments.lora_alpha, arguments.qat_mxfp4
     )
+    base_head = None
+    if arguments.anchor_weight > 0.0:
+        # The base head is the frozen reference the anchor pulls toward.  It is
+        # captured before the adapter is folded in, so it is the true base.
+        base_head = copy.deepcopy(model).to(arguments.device)
+        base_head.eval()
+        base_head.requires_grad_(False)
     model.gradient_checkpointing = arguments.gradient_checkpointing
     optimizer = torch.optim.AdamW(
         [parameter for parameter in model.parameters() if parameter.requires_grad],
@@ -342,8 +449,20 @@ def run(arguments: argparse.Namespace) -> int:
                 optimizer.zero_grad(set_to_none=True)
                 student = model(residual, tokens, positions=positions)[0]
                 loss, metrics = loss_and_metrics(
-                    student, teacher, arguments.ce_weight, arguments.tv_weight
+                    student,
+                    teacher,
+                    arguments.ce_weight,
+                    arguments.tv_weight,
+                    arguments.confidence_floor,
                 )
+                if base_head is not None:
+                    with torch.no_grad():
+                        base_logits = base_head(residual, tokens, positions=positions)[
+                            0
+                        ]
+                    loss = loss + anchor_regularizer(
+                        student, base_logits, arguments.anchor_weight
+                    )
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
                 grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -392,12 +511,27 @@ def run(arguments: argparse.Namespace) -> int:
         "device": arguments.device,
         "dtype": arguments.dtype,
         "attention": arguments.attention,
-        "bank": bank.summary(hashes=True),
+        "bank": (
+            bank.summary(hashes=True)
+            if bank is not None
+            else {
+                "mix": True,
+                "banks": [item.summary(hashes=True) for item in banks],
+                "pairs_per_bank": (
+                    dataset.per_bank_counts()
+                    if isinstance(dataset, MixedNativeMTPPairDataset)
+                    else [len(dataset)]
+                ),
+            }
+        ),
         "training_pairs": len(train_indices),
         "validation_pairs": len(validation_indices),
         "steps": step,
         "stopped_by_step_cap": stopped_by_step_cap,
         "qat_mxfp4": arguments.qat_mxfp4,
+        "confidence_floor": arguments.confidence_floor,
+        "anchor_weight": arguments.anchor_weight,
+        "bank_count": len(banks),
         "gradient_checkpointing": arguments.gradient_checkpointing,
         "fp16_initial_scale": arguments.fp16_initial_scale,
         "final_loss_scale": float(scaler.get_scale()),
