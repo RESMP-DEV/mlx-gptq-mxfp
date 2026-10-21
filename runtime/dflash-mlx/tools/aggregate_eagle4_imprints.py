@@ -28,8 +28,13 @@ def _target_label(payload: dict[str, Any]) -> str:
 
 
 def _block_label(payload: dict[str, Any]) -> str:
-    value = payload.get("block_tokens")
-    return f"b{int(value)}" if value is not None else "default"
+    requested = payload.get("requested_block_tokens")
+    effective = payload.get("block_tokens")
+    if requested is None:
+        return f"b{int(effective)}" if effective is not None else "default"
+    if effective is None or int(requested) == int(effective):
+        return f"b{int(requested)}"
+    return f"b{int(requested)}->b{int(effective)}"
 
 
 def _group_rows(paths: list[Path]) -> list[dict[str, Any]]:
@@ -52,12 +57,18 @@ def _group_rows(paths: list[Path]) -> list[dict[str, Any]]:
         match_values = [
             bool(payload.get("exact_native_id_match", False)) for _, payload in receipts
         ]
-        roofline = receipts[-1][1].get("roofline") or {}
+        last_payload = receipts[-1][1]
+        roofline = last_payload.get("roofline") or {}
         rows.append(
             {
                 "target": target,
                 "method": method,
                 "block": block,
+                "effective_block_tokens": (
+                    int(last_payload.get("block_tokens"))
+                    if last_payload.get("block_tokens") is not None
+                    else None
+                ),
                 "runs": len(receipts),
                 "generation_tps_median": statistics.median(tps_values),
                 "generation_tps_max": max(tps_values),
@@ -125,8 +136,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("matrix_dir", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
-    paths = sorted(args.matrix_dir.glob("*.json"))
-    rows = _group_rows([path for path in paths if "ids" not in path.stem])
+    paths = [
+        path
+        for path in sorted(args.matrix_dir.glob("*.json"))
+        if path.name != "summary.json" and "ids" not in path.stem
+    ]
+    rows = _group_rows(paths)
     best = _best_rows(rows)
     payload = {
         "rows": rows,

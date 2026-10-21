@@ -162,6 +162,7 @@ def _run_speculative(args: Args) -> dict[str, Any]:
             "method": args.method,
             "model_ref": args.model,
             "draft_ref": args.draft,
+            "requested_block_tokens": args.block_tokens,
             "elapsed_us": elapsed_us,
             "ttft_us": first_token_us,
             "target_weight_bytes": _parameter_bytes(bundle.target_model),
