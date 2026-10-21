@@ -32,9 +32,12 @@ non-claims.
 Never use a community-quantized target or drafter as an acceptance baseline.
 External unquantized artifacts may be inspected as provenance controls, but
 quantized comparisons must come from the pinned source and this repository's
-calibration/packing path. If an external quantized artifact is downloaded by
-mistake, remove it from the decision set and replace the measurement with a
-locally quantized artifact before publishing a verdict.
+calibration/packing path. The only exception is a trillion-plus-parameter
+model where a documented calibration lane is genuinely infeasible; record the
+constraint and provenance before using any external quant. If an external
+quantized artifact is downloaded by mistake, remove it from the decision set
+and replace the measurement with a locally quantized artifact before
+publishing a verdict.
 
 ## Git and upstream policy
 

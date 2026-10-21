@@ -87,6 +87,19 @@ provenance and non-claims is not accepted.
   quant was removed from the decision set and replaced by the local artifact.
   The compute-plus-bandwidth model and NVIDIA comparison are recorded in
   `evidence/2026-10-21-prediction-head-upstream-and-cost-audit.md`.
+- Stood up a resident loopback local27 service using only the owned calibrated
+  MXFP4 target and campaign-owned GPTQ-MXFP4 DFlash2 drafter. The service is
+  launchd-managed on `127.0.0.1:8081`, holds about 19.4 GiB active, serves a
+  real request at 54.19 decode tok/s, and supports explicit reversible
+  eviction. The Strata/DeepSeek scheduler analysis and staged concurrency
+  experiments are recorded in
+  `evidence/2026-10-21-resident-local27-mxfp4-serving.md`.
+- Added phase-one bounded admission on loopback port 8080. It removes burst
+  connection resets, but DFlash remains serial because MLX-LM marks loaded
+  drafters non-batchable. A temporary plain-MLX batch control did not
+  reproduce the earlier 142 tok/s operating point and was stopped; the next
+  concurrency experiment must replay that receipt's exact workload and arrival
+  pattern before changing the resident engine.
 
 ## Contracts to preserve
 
@@ -97,3 +110,6 @@ provenance and non-claims is not accepted.
 - The root, runtime, campaign, and CUDA checks are one quality surface.
 - Community-quantized targets or drafters are never acceptance baselines;
   quantized comparisons must come from the pinned source and this stack.
+- The resident local27 MXFP4 service is loaded by default. Explicitly evict it
+  with its service script before a substantially larger local job and restore
+  it afterward; do not kill the worker and race launchd.

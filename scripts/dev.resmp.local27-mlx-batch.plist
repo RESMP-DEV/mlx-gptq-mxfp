@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.resmp.local27-mlx-batch</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/kearm/mlx-stack/scripts/local27_mlx_batch_service.sh</string>
+        <string>run</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>ProcessType</key>
+    <string>Adaptive</string>
+    <key>StandardOutPath</key>
+    <string>/Users/kearm/.local/state/local27-mlx-batch/logs/server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/kearm/.local/state/local27-mlx-batch/logs/server.log</string>
+</dict>
+</plist>
