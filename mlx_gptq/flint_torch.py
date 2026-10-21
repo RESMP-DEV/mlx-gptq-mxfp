@@ -156,18 +156,19 @@ class EagerExperts(torch.nn.Module):
         batch, length, hidden_dim = hidden.shape
         flat_hidden = hidden.reshape(-1, hidden_dim)
         flat_indices = indices.reshape(-1)
-        flat_weights = weights.reshape(-1, 1)
+        flat_weights = weights.reshape(-1)
         output = torch.zeros_like(flat_hidden)
 
         for expert in range(self.num_experts):
-            selected = flat_indices == expert
-            if not bool(selected.any()):
+            slots = (flat_indices == expert).nonzero(as_tuple=True)[0]
+            if slots.numel() == 0:
                 continue
-            x = flat_hidden[selected]
+            tokens = slots // self.top_k
+            x = flat_hidden[tokens]
             gate = F.linear(x, self.gate_proj[expert])
             up = F.linear(x, self.up_proj[expert])
             down = F.linear(F.silu(gate) * up, self.down_proj[expert])
-            output[selected] += down * flat_weights[selected]
+            output.index_add_(0, tokens, down * flat_weights[slots].unsqueeze(-1))
 
         return output.view(batch, length, hidden_dim)
 
@@ -185,6 +186,7 @@ class SparseMoeBlock(torch.nn.Module):
         scores = self.gate(hidden).float().sigmoid()
         weights, indices = torch.topk(scores, self.experts.top_k, dim=-1)
         weights = weights / weights.sum(dim=-1, keepdim=True)
+        weights = weights.to(hidden.dtype)
         return self.experts(hidden, indices, weights) + self.shared_expert(hidden)
 
 

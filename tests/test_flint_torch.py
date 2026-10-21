@@ -19,7 +19,7 @@ def tiny_config():
         head_dim=16,
         vocab_size=128,
         num_experts=4,
-        num_experts_per_tok=1,
+        num_experts_per_tok=2,
         sliding_window=5,
         layer_types=[
             "full_attention",
@@ -54,6 +54,9 @@ def test_flint_eager_forward_and_capture():
                 layer_idx=1,
             )
     assert any(stash.tokens > 0 for stash in manager.stashes.values())
+    for name in ("gate_proj", "up_proj", "down_proj"):
+        task = next(task for task in manager.fused_tasks if task.param_name == name)
+        assert sum(manager.stashes[key].tokens for key in task.stash_keys) == 16
 
 
 def _causal_mask(hidden):
