@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 from mlx_gptq.capture import CaptureManager
@@ -121,3 +122,29 @@ def test_flint_pipeline_captures_layer_context():
 
     output = pipeline.forward_layer(model.model.layers[0], batches, 0)
     assert output[0].shape == (1, 3, 64)
+
+
+def test_flint_attention_mask_is_additive_with_sink():
+    model = FlintForCausalLM(tiny_config()).to(torch.bfloat16).eval()
+    model.model.layers[0].self_attn.softmax_offset.zero_()
+    hidden = torch.ones(1, 3, 64, dtype=torch.bfloat16)
+    mask = _causal_mask(hidden)
+    mask[..., 0, 1] = False
+    captured = {}
+
+    def fake_attention(*args, **kwargs):
+        captured["mask"] = kwargs["attn_mask"]
+        return hidden.new_zeros((1, 4, hidden.shape[1], 16))
+
+    with (
+        patch(
+            "mlx_gptq.flint_torch.F.scaled_dot_product_attention",
+            side_effect=fake_attention,
+        ),
+        torch.no_grad(),
+    ):
+        model.model.layers[0].self_attn(hidden, mask, torch.arange(3))
+
+    additive = captured["mask"]
+    assert torch.isinf(additive[0, 0, 0, 1])
+    assert additive[..., -1].eq(0).all()

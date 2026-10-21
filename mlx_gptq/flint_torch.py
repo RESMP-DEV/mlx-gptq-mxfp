@@ -105,6 +105,7 @@ class Attention(torch.nn.Module):
         additive = attention_mask.expand(q.shape[0], self.num_heads, q.shape[2], -1).to(
             q.dtype
         )
+        additive.masked_fill_(~attention_mask, float("-inf"))
         additive[..., -1] = self.softmax_offset.to(q.dtype).view(1, self.num_heads, 1)
         sink_shape = (q.shape[0], self.num_heads, 1, self.head_dim)
         sink_k = q.new_zeros(sink_shape)
