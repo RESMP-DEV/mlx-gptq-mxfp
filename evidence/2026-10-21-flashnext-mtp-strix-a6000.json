@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-21T18:47:20Z",
+  "operator": "Codex",
+  "scope": "Select and exercise a non-T4 Flash-Next native-MTP MXFP4 QAT lane, including explicit gradient checkpointing and a matched on-demand A6000 comparison.",
+  "source_revision": "470464a201c1b2caa7a92f271ba9e0f962f4dc0a",
+  "source_dirty": false,
+  "strix": {
+    "identity": {
+      "hostname": "strix",
+      "machine_id": "b71b3a116ec74b7a8797f38a0af8168a",
+      "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+      "compute_capability": "12.0",
+      "gpu_memory_mib": 8151
+    },
+    "occupancy": {
+      "process": "/home/kearm/.probe-mxfp4-sm120/bin/python -m uvicorn cuda_embed_server:app --host 127.0.0.1 --port 1236",
+      "pid": 7228,
+      "elapsed_hours": 23.45,
+      "gpu_memory_mib": 2538,
+      "gpu_utilization_percent": 0,
+      "decision": "The only GPU occupant is the intended embedding service, so Strix is available but shares only about 5.6 GiB VRAM."
+    },
+    "memory_boundary": {
+      "parameter_count": 3878549248,
+      "bf16_or_fp16_weight_gib": 7.224360942840576,
+      "expert_gate_up_gib": 3.125,
+      "expert_down_gib": 1.5625,
+      "shared_embedding_gib": 1.18408203125,
+      "shared_lm_head_gib": 1.18408203125,
+      "dense_mtp_gib": 0.1688690185546875,
+      "conclusion": "The full frozen base alone exceeds Strix's free VRAM. Gradient checkpointing saves activations, not the 7.22 GiB frozen weight footprint; a Strix GPU run would require CPU/offload, a quantized-resident base, or pausing the embedding service."
+    },
+    "cpu_checkpointing_run": {
+      "device": "CPU",
+      "dtype": "bfloat16",
+      "attention": "eager",
+      "steps": 16,
+      "gradient_checkpointing": true,
+      "trainer_elapsed_seconds": 178.4789056777954,
+      "wall_elapsed": "3:06.16",
+      "maximum_rss_kbytes": 12134980,
+      "initial_validation": {
+        "loss_ce": 11.051080438728427,
+        "loss_tv": 0.9803444869158899,
+        "top1_match": 0.00980392156862745
+      },
+      "final_validation": {
+        "loss_ce": 9.034546526915888,
+        "loss_tv": 0.9563799106388116,
+        "top1_match": 0.058823529411764705
+      },
+      "overflow_count": 0,
+      "gpu_memory_after_mib": 2548,
+      "lora_sha256": "8f5e26916687ebe0e38dfa5991d322f1d232c7a8f269497822c9f28e17caaba6",
+      "qat_sha256": "977c4d05fd77ab6af62436b1424be70a7b624a836cf723716a7b3c2f785c6dc5",
+      "receipt_sha256": "acb332cb4264d595a3536184c407d7fc961de235e2c090786384c5092d4a70a9",
+      "wandb_id": "ot5z5u1r",
+      "wandb_url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/ot5z5u1r"
+    }
+  },
+  "cloud_selection": {
+    "snapshot_utc": "2026-10-21T17:19:25Z",
+    "modal": {
+      "metered_cost_usd": 29.63,
+      "credits_and_allowances_usd": 29.63,
+      "billed_cost_usd": 0.0,
+      "conclusion": "The recurring Modal lane has no remaining monthly headroom."
+    },
+    "prime_available_options": [
+      {
+        "id": "b1fae8",
+        "gpu": "A6000 48GB",
+        "price_usd_per_hour": 0.54,
+        "status": "Available",
+        "provider": "massedcompute",
+        "selected": true
+      },
+      {
+        "id": "655392",
+        "gpu": "A10 24GB",
+        "price_usd_per_hour": 1.29,
+        "status": "Available",
+        "provider": "lambdalabs"
+      },
+      {
+        "id": "8aa838",
+        "gpu": "L40S 48GB",
+        "price_usd_per_hour": 1.79,
+        "status": "Available",
+        "provider": "datacrunch"
+      }
+    ],
+    "other_lanes": {
+      "runpod": "Wallet balance $0.00 and displayed GPU inventory was Low stock.",
+      "vast": "Wallet balance $0.00; verified on-demand offers existed around $0.17-$0.44/hour for older 24 GB GPUs, but the proven non-interruptible pod path was Prime.",
+      "packet": "Packet account and balance CLI calls returned HTTP 404.",
+      "coreweave_forge": "No sandboxes were listed and no GPU entitlement was granted."
+    },
+    "selected_pod": {
+      "id": "698dc7ace60442ccad91d1aac1d39b48",
+      "name": "flashnext-mtp-mxfp4-qat",
+      "gpu": "NVIDIA RTX A6000",
+      "gpu_memory_mib": 49140,
+      "compute_capability": "8.6",
+      "driver": "580.126.09",
+      "host_memory_gib": 47,
+      "image": "ubuntu_22_cuda_12",
+      "price_usd_per_hour": 0.54,
+      "terminated": true,
+      "cost_usd": 0.73,
+      "wallet_balance_after_usd": 33.97,
+      "pods_after_termination": 0
+    }
+  },
+  "a6000_execution": {
+    "source": {
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "selected_source_shards": 30,
+      "selected_source_bytes_gib": 55.33319216966629,
+      "verification": "All 30 shards plus config and original safetensors index passed the local pinned SHA-256 manifest."
+    },
+    "bank_verification": {
+      "logits_sha256": "35626e63326f0fd0741c3ea1fdfc8e3de0afafb94d966b651fc5a364f6ed3e09",
+      "residual_sha256": "b785dc94ff21683c39341a7100eda335c13ec8e930920ec31aa0b62a84d40ff6",
+      "sidecar_sha256": "311c5bb811f7eea20aab21e121c0e98809a13a49355770ae9e0d539725a8fed5",
+      "prompt_ids_sha256": "82fbabd73cda3730783fb57e009ab57923750c2cfb0e197bc055e73975385db7"
+    },
+    "matched_16step": {
+      "gradient_checkpointing": {
+        "wall_elapsed": "2:55.13",
+        "trainer_elapsed_seconds": 24.345203638076782,
+        "observed_gpu_memory_mib": 17438,
+        "maximum_rss_kbytes": 11746016,
+        "overflow_count": 3,
+        "wandb_id": "farsp8ze",
+        "wandb_url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/farsp8ze"
+      },
+      "without_checkpointing": {
+        "wall_elapsed": "2:55.87",
+        "trainer_elapsed_seconds": 21.357007265090942,
+        "observed_gpu_memory_mib": 17410,
+        "maximum_rss_kbytes": 11746392,
+        "overflow_count": 3,
+        "wandb_id": "d6sn89s8",
+        "wandb_url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/d6sn89s8"
+      },
+      "lora_sha256": "f605abb8ccf6c928787d1867f8e44c7e837e1c0fb74029231a9d9394d3ed8b5a",
+      "qat_sha256": "5f6875c44dfdca991502a96b5a846986b6368d6028bd34b4d9b417e7d2b27a14",
+      "conclusion": "On A6000 the two arms produced byte-identical artifacts. Checkpointing added 2.99 trainer seconds for 16 steps without lowering the 17.4 GiB resident footprint, so it is not needed on this host."
+    },
+    "full_epoch_without_checkpointing": {
+      "device": "cuda:0",
+      "dtype": "float16",
+      "attention": "sdpa",
+      "steps": 409,
+      "stopped_by_step_cap": false,
+      "wall_elapsed": "3:32.65",
+      "trainer_elapsed_seconds": 61.42920970916748,
+      "maximum_rss_kbytes": 11745988,
+      "sampled_peak_gpu_memory_mib": 17464,
+      "sampled_mean_gpu_utilization_percent": 16.953488372093283,
+      "initial_validation": {
+        "loss_ce": 11.025154861165028,
+        "loss_tv": 0.9802236448535148,
+        "loss_kl": 10.63626160058971,
+        "top1_match": 0.00980392156862745
+      },
+      "final_validation": {
+        "loss_ce": 2.473383844435767,
+        "loss_tv": 0.4210100483981327,
+        "loss_kl": 2.0844905793937564,
+        "top1_match": 0.6078431372549019
+      },
+      "overflow_count": 3,
+      "final_loss_scale": 8192.0,
+      "lora_bytes": 4376160,
+      "lora_sha256": "31b1dd9d4acd28d2803146583587ef421886b2f0497dc10096b5e1196fa9df19",
+      "qat_bytes": 92002504,
+      "qat_sha256": "4a2d787fc87a277683a2fb1b63a0fb95ddd8a0f72eb53b63d9bc4d5845e85b10",
+      "receipt_sha256": "164e27fc6f1fe765ebc8849ce2130f4c182e7b05e80dc6791a37701cc4989183",
+      "wandb_id": "qinxgmw1",
+      "wandb_url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/qinxgmw1"
+    }
+  },
+  "gradient_checkpointing_decision": {
+    "implementation": "FlashNextMTP now has explicit non-reentrant torch.utils.checkpoint support and the trainer exposes --gradient-checkpointing.",
+    "strix": "Correct and useful for CPU/offload experiments, but it cannot make the full frozen base fit in the 5.6 GiB left beside the embedding service.",
+    "a6000": "Correct but unnecessary; matched 16-step runs had the same resident footprint and byte-identical artifacts, with checkpointing slightly slower.",
+    "future_strix_gpu_path": "Use CPU/offload or a quantized-resident frozen base. Gradient checkpointing may then bound activation memory, but that combined path is not implemented or measured."
+  },
+  "checks": [
+    {
+      "command": "uv run --frozen --extra dev python -m pytest tests/test_flashnext_mtp.py tests/test_flashnext_mtp_train.py tests/test_export_flashnext_mtp_checkpoint.py -q",
+      "exit_code": 0,
+      "result": "13 focused tests passed locally and on Strix."
+    },
+    {
+      "command": "just quality",
+      "exit_code": 0
+    },
+    {
+      "command": "sha256sum -c source-manifest.sha256 on A6000",
+      "exit_code": 0,
+      "result": "32/32 pinned source files matched."
+    },
+    {
+      "command": "uv run --frozen --extra tracking wandb sync <offline-run>",
+      "exit_code": 0,
+      "result": "Strix and three A6000 runs synced to private W&B Forge."
+    },
+    {
+      "command": "prime --plain pods terminate 698dc7ace60442ccad91d1aac1d39b48 --yes",
+      "exit_code": 0,
+      "result": "Pod terminated; Prime reports zero pods."
+    }
+  ],
+  "non_claims": [
+    "The bank is still one private prompt; the 60.78% same-prompt top-1 result is not session-disjoint acceptance and may be memorization.",
+    "No candidate is integrated into Strata serving or promoted.",
+    "A6000 GPU utilization is low, indicating Python expert dispatch and loading dominate; this is not a kernel throughput claim.",
+    "Strix GPU training was not attempted because the frozen weight footprint exceeds free VRAM.",
+    "No T4 or Colab runtime was used."
+  ]
+}

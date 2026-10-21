@@ -98,6 +98,20 @@ provenance and non-claims is not accepted.
   FlexAttention can execute on T4 but has no model-level integration or benefit
   at one-token sequence length. `wandb` is the only added dependency. Full
   evidence: `evidence/2026-10-21-flashnext-mtp-mxfp4-qat.json`.
+- Added explicit non-reentrant gradient checkpointing to the custom MTP forward.
+  Strix is reachable and hosts only its embedding service, but that service
+  leaves about 5.6 GiB while the frozen FP16/BF16 base alone is 7.22 GiB, so
+  checkpointing cannot make the full GPU-resident path fit there. A real
+  16-step Strix CPU checkpointing run passed in 3:06 without disturbing GPU
+  occupancy.
+- Selected an on-demand Prime A6000 48 GB at $0.54/hour after confirming the
+  recurring Modal credit lane was exhausted. The A6000 loaded the pinned Hub
+  source and hash-verified teacher bank, completed matched 16-step arms with
+  and without checkpointing, then completed the full 409-step FP16 MXFP4 QAT
+  epoch. Peak sampled VRAM was 17,464 MiB; same-prompt CE improved from 11.025
+  to 2.473 and top-1 to 60.78%. The pod was terminated after artifact retrieval
+  for $0.73 total. Full evidence:
+  `evidence/2026-10-21-flashnext-mtp-strix-a6000.json`.
 
 ## Contracts to preserve
 
