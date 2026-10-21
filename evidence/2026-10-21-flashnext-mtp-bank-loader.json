@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-21T14:40:00Z",
+  "operator": "Codex",
+  "scope": "Define and validate the first Flash-Next native-MTP training bank adapter without modifying the 27B DFlash2 trainer.",
+  "source_revision": "5edf461",
+  "source_dirty": true,
+  "decision": {
+    "existing_trainer": "mlx_gptq.dflash2_distill is retained unchanged as the Qwen3.8-27B/DFlash2 trainer.",
+    "new_target": "Qwen3.8-Flash-Next native one-layer Qwen4Exp MTP.",
+    "reason": "DFlash2 hard-codes five 5,120-wide draft layers, 25,600-wide target features, 46 LoRA modules, 47 QAT tensor pairs, and DFlash export names. Flash-Next has 48 hybrid GDN/QSA/PLE trunk layers, hidden size 2,560, a 10,240-wide four-stream residual, and an already-running one-layer native MTP cell.",
+    "pairing": "Source verifier residual row i plus input token at i+1; teacher full-vocabulary logits row i+1 predict position i+2. Using logits row i would train the wrong one-step target."
+  },
+  "implementation": {
+    "module": "mlx_gptq/flashnext_mtp.py",
+    "bank_reader": "NativeMTPBank validates headed matrix byte lengths, sidecar columns, accepted-row bounds, unique round/row keys, contiguous positions, token ranges, prompt-final-plus-prior-argmax input chain, per-row finiteness, and per-row binary argmax agreement.",
+    "dataset": "NativeMTPPairDataset lazily maps 512 accepted verifier rows to 511 two-ahead native-MTP training pairs.",
+    "manifest": "write_training_manifest emits flashnext-native-mtp-bank-v1 with artifact hashes and pairing non-claims."
+  },
+  "real_bank": {
+    "host": "strix",
+    "root": "/home/kearm/mlx-gptq-dflash2/strix-mtp-qat-banks/fable-coding-0067-first512-flashnext-20261021T003",
+    "rows": 512,
+    "mtp_pairs": 511,
+    "vocab": 248320,
+    "residual_width": 10240,
+    "logits_sha256": "35626e63326f0fd0741c3ea1fdfc8e3de0afafb94d966b651fc5a364f6ed3e09",
+    "residual_sha256": "b785dc94ff21683c39341a7100eda335c13ec8e930920ec31aa0b62a84d40ff6",
+    "sidecar_sha256": "311c5bb811f7eea20aab21e121c0e98809a13a49355770ae9e0d539725a8fed5",
+    "manifest_sha256": "a5c87266cc34d84393148e331c9fb3faf62f1bf2f7d884462f98e6dec9bd1c9b",
+    "bank_receipt_sha256": "8e2e204a4f97c1739e3dada8693429624582545df5d8de1596d85965e9cabeb2",
+    "collector_revision": "RESMP-DEV/Strata@d2d6e413",
+    "loader_result": "Every one of 511 pairs passed shape, finiteness, argmax, and source/teacher position checks."
+  },
+  "checks": [
+    {
+      "command": "PYTHONPATH=. uv run --frozen pytest tests/test_flashnext_mtp.py -q",
+      "exit_code": 0,
+      "result": "4 focused tests passed."
+    },
+    {
+      "command": "uv run --frozen ruff check mlx_gptq/flashnext_mtp.py tests/test_flashnext_mtp.py",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run --frozen ruff format --check mlx_gptq/flashnext_mtp.py tests/test_flashnext_mtp.py",
+      "exit_code": 0
+    },
+    {
+      "command": "Real Strix bank loaded through NativeMTPPairDataset and every pair validated.",
+      "exit_code": 0
+    }
+  ],
+  "non_claims": [
+    "No native MTP weights, LoRA adapters, QAT tensors, checkpoints, or runtime artifacts were trained or modified.",
+    "The loader proves data alignment only; it does not prove MTP forward parity or model quality.",
+    "The 512-row bank is a small private smoke substrate, not a representative training corpus.",
+    "No Colab T4 was allocated."
+  ]
+}

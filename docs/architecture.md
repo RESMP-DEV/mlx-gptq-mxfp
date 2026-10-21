@@ -72,6 +72,13 @@ provenance and non-claims is not accepted.
   incumbent MXFP4 DFlash2 stack remains best at 51.028 tok/s. Full details,
   commands, and non-claims:
   `evidence/2026-10-21-eagle4-bf16-mxfp4-serving-comparison.md`.
+- Added the first Flash-Next native-MTP target substrate without altering the
+  27B/DFlash2 trainer. `NativeMTPBank` validates Strata's aligned full-logit,
+  10,240-wide residual, and sidecar files; `NativeMTPPairDataset` maps 512
+  accepted verifier rows to 511 two-ahead MTP pairs by pairing residual row
+  `i` and token `i+1` with teacher logits row `i+1`. The real private bank and
+  all 511 pairs passed on Strix. See
+  `evidence/2026-10-21-flashnext-mtp-bank-loader.json`.
 
 ## Contracts to preserve
 
