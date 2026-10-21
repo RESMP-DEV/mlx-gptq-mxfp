@@ -114,13 +114,13 @@ def _run_speculative(args: Args) -> dict[str, Any]:
         draft_window_size=4096,
         verify_len_cap=args.max_tokens,
     )
-    started_ns = time.perf_counter_ns()
     bundle = load_runtime_bundle(
         model_ref=args.model,
         draft_ref=args.draft,
         draft_quant=args.draft_quant,
         verify_config=runtime_context.verify,
     )
+    started_ns = time.perf_counter_ns()
     first_token_us: float | None = None
     prefill: PrefillCompleteEvent | None = None
     summary: SummaryEvent | None = None
