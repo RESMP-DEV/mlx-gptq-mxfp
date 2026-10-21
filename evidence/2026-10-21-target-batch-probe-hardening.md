@@ -172,6 +172,33 @@ cause connection failures in the burst. Sampling is now opt-in through
 `--metrics-interval-ms`, whose default is now `0`, meaning off. The
 sampler itself is unchanged and still records timed samples when enabled.
 
+## Long-context behaviour on the batch lane
+
+Long prompts were the known bottleneck in the earlier capacity receipt, so
+they were measured on the batch lane with distinct prefixes, so the prefix
+cache could not absorb the prefill. Each request carried about 9,025 prompt
+tokens.
+
+| Concurrency | Requests ok | Wall s | Prompt tokens | Aggregate prompt tok/s | Per-request wall s |
+|---|---:|---:|---:|---:|---|
+| 1 | 1 | 42.52 | 9,025 | 212.3 | 42.5 |
+| 2 | 2 | 47.25 | 18,050 | 382.0 | 31.6, 47.2 |
+| 4 | 4 | 138.02 | 36,100 | 261.6 | 83.1, 83.1, 138.0, 138.0 |
+
+Prefill scales from one to two concurrent long prompts and then degrades at
+four. This matches the earlier finding that useful long-prefill concurrency
+is about two, and it is the reason the batch lane should not be given a
+high-concurrency long-prompt workload.
+
+The batch lane also serves long prompts that repeat a shared prefix at the
+speed of a cached prefill: a repeated 9k prompt returned in under a second,
+because the prompt cache absorbed it.
+
+## Non-claims for the long-context result
+
+- Three concurrency points on one prompt shape are not a capacity curve.
+- The repeated-prefix case is a prefix-cache result, not a prefill result.
+
 ## Non-claims for the live result
 
 - The 130 to 142 aggregate tok/s range is a three-run observation on one

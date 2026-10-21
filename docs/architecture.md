@@ -138,7 +138,11 @@ provenance and non-claims is not accepted.
   same token-ID digest and the same content digest, so batching changed
   throughput and not output. The batch lane finished in 31.48 s at 130.11
   aggregate tok/s; the serial lane took 238.67 s at 17.16 aggregate tok/s.
-  See `evidence/2026-10-21-target-batch-probe-hardening.md`.
+- Measured long prompts on the batch lane with about 9,025 prompt tokens and
+  distinct prefixes. Prefill reached 212.3 tok/s at one way, 382.0 at two,
+  and 261.6 at four, so long-prompt concurrency stays low and the lane
+  should not take a high-concurrency long-prompt workload. See
+  `evidence/2026-10-21-target-batch-probe-hardening.md`.
 
 ## Contracts to preserve
 
