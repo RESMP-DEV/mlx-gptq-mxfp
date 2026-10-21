@@ -58,7 +58,11 @@ def _group_rows(paths: list[Path]) -> list[dict[str, Any]]:
             bool(payload.get("exact_native_id_match", False)) for _, payload in receipts
         ]
         last_payload = receipts[-1][1]
-        roofline = last_payload.get("roofline") or {}
+        last_payload.get("roofline") or {}
+        roofline_values = [
+            _safe(payload.get("roofline", {}).get("weights_only_roofline_tps"))
+            for _, payload in receipts
+        ]
         rows.append(
             {
                 "target": target,
@@ -74,9 +78,7 @@ def _group_rows(paths: list[Path]) -> list[dict[str, Any]]:
                 "generation_tps_max": max(tps_values),
                 "acceptance_median": statistics.median(acceptance_values),
                 "exact_match_all": all(match_values),
-                "weights_only_roofline_tps": _safe(
-                    roofline.get("weights_only_roofline_tps")
-                ),
+                "weights_only_roofline_tps": _safe(statistics.median(roofline_values)),
                 "receipts": [str(path) for path, _ in receipts],
             }
         )
