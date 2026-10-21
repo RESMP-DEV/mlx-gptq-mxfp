@@ -1388,6 +1388,49 @@ def test_generation_snapshot_published_for_truncated_stable_prefix():
     assert snapshot.kind == "generation"
 
 
+def test_generation_request_publishes_stable_prefill_frontier_to_l2():
+    context, draft_model, key, cache, l2, manager, snapshot_service = _frontier_snapshot_setup(
+        with_l2=True,
+        frontier_stride=8,
+    )
+
+    events = list(
+        spec_epoch.stream_dflash_generate_impl(
+            target_model=object(),
+            target_ops=_FakeTargetOps(),
+            tokenizer=object(),
+            draft_model=draft_model,
+            draft_backend=_FakeDraftBackend(),
+            prompt="unused",
+            max_new_tokens=1,
+            prompt_tokens_override=list(range(1, 11)),
+            snapshot_service=snapshot_service,
+            stable_prefix_len=8,
+            runtime_context=context,
+        )
+    )
+
+    prefill_snapshots = [
+        event
+        for event in events
+        if isinstance(event, SnapshotPublishedEvent) and event.kind == "prefill"
+    ]
+    generation_snapshots = [
+        event
+        for event in events
+        if isinstance(event, SnapshotPublishedEvent) and event.kind == "generation"
+    ]
+
+    assert [event.prefix_len for event in prefill_snapshots] == [8]
+    assert [event.prefix_len for event in generation_snapshots] == [11]
+    assert l2 is not None
+    assert [snapshot.prefix_len for snapshot in l2.snapshots] == [8]
+    result = manager.lookup([*range(1, 9), 99], key)
+    assert result.matched_tokens == 8
+    assert result.snapshot is not None
+    assert result.snapshot.kind == "prefill"
+
+
 def test_generation_snapshot_carries_gdn_sidecar_at_stable_boundary(monkeypatch):
     monkeypatch.setattr(spec_epoch, "_SIDECAR_MIN_BOUNDARY", 2)
     target_ops = _FakeTargetOps()

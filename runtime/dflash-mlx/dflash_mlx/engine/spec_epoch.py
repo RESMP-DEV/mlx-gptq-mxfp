@@ -826,10 +826,14 @@ class SpeculativeSession:
             # Sparse prefill RoPEs tokens at non-contiguous positions, so a
             # prefix snapshot keyed on a dense token prefix cannot be replayed.
             publish_prefix_snapshots = False
-        if request.max_new_tokens > 0 and request.should_collect_generation_snapshot_hidden(
-            supports_prefix_snapshot
-        ):
-            publish_prefix_snapshots = False
+        collect_generation_snapshot_hidden = (
+            request.should_collect_generation_snapshot_hidden(supports_prefix_snapshot)
+        )
+        # Keep generation work out of L1, but preserve an L2 frontier for a
+        # client disconnect after an expensive prefill.
+        prefill_snapshots_l2_only = (
+            request.max_new_tokens > 0 and collect_generation_snapshot_hidden
+        )
 
         start_ns = time.perf_counter_ns()
         evt = self.memory_waterfall_event("after_target_cache_create")
@@ -1027,9 +1031,12 @@ class SpeculativeSession:
                 allow_full_context_draft_layers=allow_full_context_draft_layers,
                 from_snapshot=bool(snap_prefix_len > 0),
                 snap_prefix_len=snap_prefix_len,
+                l2_only=prefill_snapshots_l2_only,
             )
             yield_pause.done(_snapshot_build)
-            if snapshot_event is not None:
+            if snapshot_event is not None and (
+                not prefill_snapshots_l2_only or snapshot_event.admitted
+            ):
                 _pre_yield = yield_pause.mark()
                 yield snapshot_event
                 yield_pause.done(_pre_yield)

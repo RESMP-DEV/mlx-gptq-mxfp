@@ -5,8 +5,10 @@ readonly REPO=/Users/kearm/mlx-stack
 UV=/Users/kearm/.local/bin/uv
 readonly LABEL=dev.resmp.local27-mxfp4
 readonly PROXY_LABEL=dev.resmp.local27-admission
+readonly WATCH_LABEL=dev.resmp.local27-metrics-watch
 readonly PLIST="$REPO/scripts/$LABEL.plist"
 readonly PROXY_PLIST="$REPO/scripts/$PROXY_LABEL.plist"
+readonly WATCH_PLIST="$REPO/scripts/$WATCH_LABEL.plist"
 readonly STATE=/Users/kearm/.local/state/local27-mxfp4
 readonly URL=http://127.0.0.1:8081/metrics
 
@@ -59,8 +61,12 @@ restore)
 	if ! loaded "$PROXY_LABEL"; then
 		launchctl bootstrap "gui/$(id -u)" "$PROXY_PLIST"
 	fi
+	if ! loaded "$WATCH_LABEL"; then
+		launchctl bootstrap "gui/$(id -u)" "$WATCH_PLIST"
+	fi
 	launchctl kickstart -k "gui/$(id -u)/$LABEL"
 	launchctl kickstart "gui/$(id -u)/$PROXY_LABEL"
+	launchctl kickstart "gui/$(id -u)/$WATCH_LABEL"
 	launchctl print "gui/$(id -u)/$LABEL" | sed -n '1,60p'
 	launchctl print "gui/$(id -u)/$PROXY_LABEL" | sed -n '1,40p'
 	;;
