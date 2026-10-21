@@ -45,11 +45,19 @@ Agent: Codex
 
 ## Validation
 
-- `python -m pytest -q tests/test_flint_torch.py` passed 3 tests.
+- `python -m pytest -q tests/test_flint_torch.py` passed 4 tests.
 - `ruff check tests/test_flint_torch.py mlx_gptq/calibrate.py` passed.
 - Live config resolution built 49 layers; layer 2 routed expert shape was
   `(256, 512, 2048)`.
 - MLX-LM adapter tests passed 3 tests and adapter commit `428b496` is pushed.
+- A tiny four-layer BF16 fixture completed the full path: raw checkpoint →
+  MLX MXFP4 conversion → Stage-A MXFP4 GPTQ → Stage-B artifact injection →
+  reload. The packed model emitted `(1, 7, 128)` logits; versus BF16, mean
+  logit cosine was 0.983635, minimum cosine 0.978347, and top-1 agreement was
+  5/7 on the tiny random fixture. This is format proof only, not quality
+  evidence for the real checkpoint.
+- The eager attention mask test verifies masked additive entries are negative
+  infinity and the learned sink column is preserved.
 
 ## Active transfers
 

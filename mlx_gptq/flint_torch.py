@@ -224,6 +224,7 @@ class FlintModel(torch.nn.Module):
         self.layers = torch.nn.ModuleList(
             DecoderLayer(config, i) for i in range(config.num_hidden_layers)
         )
+        self.norm = torch.nn.RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     @staticmethod
     def _base_mask(
@@ -270,7 +271,7 @@ class FlintModel(torch.nn.Module):
                 position_ids=positions,
                 layer_idx=idx,
             )
-        return hidden
+        return self.norm(hidden)
 
 
 class FlintForCausalLM(torch.nn.Module):
