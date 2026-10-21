@@ -12,7 +12,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>LOCAL27_TARGET_BATCH_REPO</key>
-    <string>/Users/kearm/mlx-stack/.worktrees/freetoken-serving</string>
+    <string>/Users/kearm/mlx-stack</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
