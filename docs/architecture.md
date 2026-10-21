@@ -80,8 +80,11 @@ provenance and non-claims is not accepted.
   for serving: split-K precision failed on M4 and real model throughput did
   not improve. Synced the two safe MLX-LM upstream fixes into
   `RESMP-DEV/mlx-lm`.
-- Pulled and verified DSpark and native-MTP W4 heads, then measured them with
-  upstream `mlx-vlm`: MTP peaked at 27.405 tok/s and DSpark at 24.680 tok/s.
+- Pulled and verified the official DSpark BF16 head, quantized the pinned
+  local MTP BF16 head ourselves, and measured both with upstream `mlx-vlm`:
+  local MTP BF16 b2 reached 26.705 tok/s, local MTP W4 b2 reached 25.481
+  tok/s, and DSpark reached 24.680 tok/s. A briefly downloaded community MTP
+  quant was removed from the decision set and replaced by the local artifact.
   The compute-plus-bandwidth model and NVIDIA comparison are recorded in
   `evidence/2026-10-21-prediction-head-upstream-and-cost-audit.md`.
 
@@ -92,3 +95,5 @@ provenance and non-claims is not accepted.
 - Scale layout changes must be byte-compared, not inferred from throughput.
 - GPU claims require live device receipts and explicit source provenance.
 - The root, runtime, campaign, and CUDA checks are one quality surface.
+- Community-quantized targets or drafters are never acceptance baselines;
+  quantized comparisons must come from the pinned source and this stack.

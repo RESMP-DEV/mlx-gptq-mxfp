@@ -78,6 +78,25 @@ Deferred:
 Irrelevant to Qwen3.8-27B in this audit: PLaMo3 YaRN, AFM7 KV-reuse offsets,
 and ERNIE-4.5 correction-bias routing.
 
+## Owned DFlash2 quantization history
+
+The campaign did test its own DFlash2 GPTQ-MXFP4 artifact. The first
+campaign-owned solve calibrated all 47 draft linear tensors from 1,981 real
+target-verified cycles and packed
+`/Users/kearm/models/z-lab-Qwen3.8-27B-DFlash2-GPTQ-MXFP4-1981cycles` as
+native MXFP4 with group size 32. It matched 256/256 target IDs, reached 72.656%
+acceptance and 51.852 tok/s on the smoke gate, and measured 66.683% mean
+acceptance over the same 24 prompts as the 66.590% affine-W4 control.
+
+Later selector distillations and a QAT-style MXFP4 arm were live-gated and
+rejected; receipts are in
+`evidence/imported/mlx-fork/2026-10-17-dflash2-selector-distillation-rejection.md`
+and
+`evidence/imported/mlx-fork/2026-10-19-dflash2-qat-mxfp4-lane.md`.
+The short-prompt serving matrix in this document uses the locally
+fine-tuned prefix selector with runtime affine W4 because that remains the
+measured incumbent. It does not use a community quantization.
+
 ## New artifacts
 
 Downloaded with `hfd` and full verification through a process-local IPv4 DNS
@@ -86,7 +105,16 @@ shim; the system network configuration was not changed.
 | Artifact | Revision | Size | Purpose |
 |---|---|---:|---|
 | `RedHatAI/Qwen3.8-27B-speculator.dspark` | `87ca2fdc67f316f6c1f9ebc7ef7bbb0ad299a4ce` | 3,976,883,362 bytes | DSpark five-layer head |
-| `mlx-community/Qwen3.8-27B-MTP-4bit` | `b643c01b6d3b094e325edb6ebd832e16c486c575` | 265,665,065 bytes | Native MTP W4 adapter |
+
+A community MTP W4 adapter was briefly downloaded as an external control. That
+use violated the project artifact-provenance rule and has been removed from
+the decision set. The replacement is locally quantized from the pinned
+extracted BF16 MTP head:
+
+- Source: `/Users/kearm/models/Qwen3.8-27B-MLX-MTP-BF16-1d4bf0f`.
+- Local W4 artifact:
+  `/Users/kearm/models/RESMP-DEV-Qwen3.8-27B-MTP-W4-local`.
+- Payload: 238,930,944 bytes, affine W4 group 64.
 
 The RedHat DSpark checkpoint uses the `speculators` config schema. A metadata
 only normalized view was created at
@@ -122,9 +150,10 @@ DFlash2:
 - Runtime W4 body used by the winning path: 1.083 GB.
 - Five non-causal draft layers and rank-256 selector.
 
-Native MTP W4:
+Native MTP:
 
-- Model payload: 238.931 MB.
+- BF16 payload: 849.399 MB.
+- Local W4 payload: 238.931 MB.
 - One recurrent one-token layer.
 - Shares target embedding and full head.
 
@@ -149,14 +178,17 @@ cross-runtime comparison, not a single-kernel benchmark.
 | Local | EAGLE-4 selective W4 | b2 | 34.522 | 1.684 tok/round | yes |
 | Local | DFlash2 W4 selector | b8->b5 | 50.701 | 4.000 tok/round | yes |
 | mlx-vlm | Native | default | 26.623 | one token | n/a |
-| mlx-vlm | Native MTP W4 | b2 | 27.405 | 1.880 tok/round | yes |
-| mlx-vlm | Native MTP W4 | b3 | 25.156 | 2.460 tok/round | yes |
+| mlx-vlm | Local pinned-source MTP BF16 | b2 | 26.705 | 1.880 tok/round | yes |
+| mlx-vlm | Local packed MTP W4 | b2 | 25.481 | 1.880 tok/round | yes |
+| mlx-vlm | Local packed MTP W4 | b3 | 24.312 | 2.460 tok/round | yes |
 | mlx-vlm | DFlash2 RTN MXFP4 | b8 | 28.762 | 2.580 tok/round, avg draft 2 | yes |
 | mlx-vlm | DSpark BF16 | b5 | 24.680 | 3.560 tok/round | yes |
 | mlx-vlm | DSpark W4 | b5 | 24.568 | 3.560 tok/round | yes |
 
 The first MTP CLI smoke stopped at EOS and reported 100% draft acceptance over
-six rounds. It is not included in the forced-32-token table.
+six rounds. It is not included in the forced-32-token table. Its community-W4
+successor was also removed from the decision set and replaced by the local
+BF16 and local-W4 rows above.
 
 Selective EAGLE-4 W4 runs were 25.727 cold and 34.522/34.710 warm. The BF16
 control runs were 32.040/32.083/32.266. Exact native greedy IDs passed in all

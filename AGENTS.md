@@ -27,6 +27,15 @@ a failed run. GPU-only claims additionally require a dated live hardware
 receipt with exact commands, device/library versions, source provenance, and
 non-claims.
 
+## Artifact provenance
+
+Never use a community-quantized target or drafter as an acceptance baseline.
+External unquantized artifacts may be inspected as provenance controls, but
+quantized comparisons must come from the pinned source and this repository's
+calibration/packing path. If an external quantized artifact is downloaded by
+mistake, remove it from the decision set and replace the measurement with a
+locally quantized artifact before publishing a verdict.
+
 ## Git and upstream policy
 
 Publish only to RESMP-DEV remotes. Never push to or open contributions against
