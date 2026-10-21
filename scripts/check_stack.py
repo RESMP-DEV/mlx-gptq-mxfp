@@ -73,6 +73,8 @@ def checks(root: Path = ROOT) -> list[tuple[str, list[str], Path]]:
                 "scripts",
                 "tools/mxfp4_kernel",
                 "tests/test_grid_and_packing.py",
+                "runtime/dflash-mlx/dflash_mlx/server/serving_contracts.py",
+                "runtime/dflash-mlx/tests/test_serving_contracts.py",
             ],
             root,
         ),

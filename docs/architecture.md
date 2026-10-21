@@ -26,6 +26,7 @@ provenance and non-claims is not accepted.
 | Old repository retirement | Historical repositories retained read-only as subtree sources; redundant local clones removed | New work targets `mlx-stack` only |
 | Full projection matrix | Dominant activation/GEMM cases qualified; all weights qualified | Extend only when a missing shape owns measured time |
 | Local 27B CCR fallback | Calibrated MXFP4 loopback server qualified at 32 short-context requests | Promote only through source-policy review and idle listener restart |
+| Batched MTP serving | Portable confidence-row, admission, acceptance, and rollback contracts are implemented; live batching is not wired | Exact serial parity, row independence, rollback equality, prefix-cache equality, and paired concurrency gates |
 
 ## 2026-10-20 work log
 
@@ -100,6 +101,15 @@ provenance and non-claims is not accepted.
   reproduce the earlier 142 tok/s operating point and was stopped; the next
   concurrency experiment must replay that receipt's exact workload and arrival
   pattern before changing the resident engine.
+- Audited FreeToken `cc4aa085`, Strata `66067e30`, MLX-LM 0.31.3, and the
+  DFlash seams with four bounded workers. FreeToken has no serving-loop MTP
+  and drops MTP checkpoints; its reusable contribution is multi-currency
+  admission and capability-declared cache management. Strata's pure
+  confidence-varlen planner is the portable batched-MTP policy. Added the
+  backend-neutral confidence-row planner, short-first aging admission,
+  per-row acceptance contract, rollback grouping, and JSON interop in
+  `runtime/dflash-mlx/dflash_mlx/server/serving_contracts.py`. See
+  `evidence/2026-10-21-freetoken-serving-and-batched-mtp-architecture.md`.
 
 ## Contracts to preserve
 
