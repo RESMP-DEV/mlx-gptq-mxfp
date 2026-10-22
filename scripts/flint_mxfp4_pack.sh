@@ -58,6 +58,7 @@ pack() {
 		--calib "$CALIB" \
 		--mlx-path "$OUTPUT" \
 		--verify
+	cp "$SOURCE/LICENSE" "$OUTPUT/LICENSE"
 }
 
 evaluate() {
