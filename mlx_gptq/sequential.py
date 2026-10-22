@@ -491,8 +491,9 @@ class Pipeline:
             try:
                 name = f"{prefix}.{task.name}.weight"
                 bits = self._bits_for(name)
+                raw_max = float(task.module.weight.detach().float().abs().max())
                 W = task.module.weight.detach().to(device, torch.float32).unsqueeze(0)
-                H = get_hessian(task.stash_key, device).unsqueeze(0)
+                H = get_hessian(task.stash_key, device).clone().unsqueeze(0)
                 q, s, b, W_dq, rel = solve_gptq(
                     W,
                     H,
@@ -503,6 +504,14 @@ class Pipeline:
                     storage_dtype=self.storage_dtype,
                     mode=self.args.mode,
                     mxfp_algorithm=self.args.mxfp_algorithm,
+                )
+                log.info(
+                    "linear %s: raw_max=%.6g scale=%d..%d dq_max=%.6g",
+                    name,
+                    raw_max,
+                    int(s.min()),
+                    int(s.max()),
+                    float(W_dq.abs().max()),
                 )
                 task.module.weight.data.copy_(W_dq[0].to(task.module.weight.dtype))
                 result.add(
