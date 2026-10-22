@@ -46,6 +46,10 @@ pack() {
 		exit 1
 	fi
 	check_inputs
+	mkdir -p "$REPO/build/reports/flint"
+	"$REPO/.venv/bin/python" -m mlx_gptq.validate_artifacts \
+		--model "$SOURCE" --calib "$CALIB" \
+		--output "$REPO/build/reports/flint/artifact-validation.json"
 	PYTHONPATH="$REPO:/Users/kearm/mlx-lm" uv run --no-project \
 		--with 'mlx==0.32.4' --with torch --with 'transformers>=5.17' \
 		--with accelerate --with safetensors --with numpy \
