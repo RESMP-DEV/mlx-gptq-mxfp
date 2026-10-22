@@ -128,6 +128,22 @@ provenance and non-claims is not accepted.
   candidate and no live acceptance was measured. Full evidence:
   `evidence/2026-10-21-flashnext-mtp-heldout-evaluation.json`.
 
+- Answered whether the MTP QAT gain is memorization or specialization, and
+  rebuilt the recipe accordingly. Trained on nine prompts from four corpora
+  and measured on four prompts whose group identifiers are disjoint from
+  every training prompt, the mixed head reaches 38.41% held-out top-1 against
+  a 4.84% base, with 709 wins and 23 losses over 2,044 pairs and an exact
+  McNemar p of 1.9e-177. Its same-corpus top-1 is 40.81%, so the gap between
+  fitted and held-out performance fell from 42.1 points to 2.4: the gain
+  transfers across prompts, which is specialization to the target's draft
+  distribution rather than memorization of one prompt. Teacher confidence
+  clamping was implemented and measured at floors 0.98 and 0.995; both cost
+  held-out top-1, so the published artifact uses the exact verifier
+  distribution. The improved candidate replaced the private first draft at
+  `RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft` and the published
+  artifacts were downloaded back and hash-verified. Full evidence:
+  `evidence/2026-10-22-flashnext-mtp-mixed-prompt-generalization.json`.
+
 ## Contracts to preserve
 
 - E2M1 uint32 words use MLX's LSB-first `4*i` layout; byte operands use low

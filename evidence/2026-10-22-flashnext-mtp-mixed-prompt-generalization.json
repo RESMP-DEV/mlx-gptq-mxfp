@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-22T00:50:00Z",
+  "operator": "Codex",
+  "scope": "Answer whether the Flash-Next native MTP MXFP4 QAT gain is memorization or specialization, and rebuild the recipe with a diverse multi-prompt corpus, teacher clamping, and a base anchor.",
+  "source_revision": "7df971e1e7eebf8b7d095a061a05930a371999a2",
+  "source_dirty": false,
+  "question": {
+    "memoization_or_specialization": "Both, and the split is measurable. A single-prompt fit gains 42.1 points on its own prompt and 18.40% on one disjoint prompt, so a large part of it is prompt-specific memorization. Trained on nine prompts and measured on four group-disjoint prompts, the same-corpus top-1 is 40.81% and the held-out top-1 is 38.41%, a gap of 2.4 points. The gain therefore transfers across prompts, which is specialization to the target's draft distribution rather than memorization of one prompt.",
+    "any_amount_of_gain_is_useful": "Agreed, and the mix is what converts the gain into a transferable one."
+  },
+  "data_substrate": {
+    "corpus": "fable-code-retrieval-v1, private local corpus",
+    "split_rule": "One prompt per (source, group_id). Training and evaluation group_ids are disjoint. Every corpus source contributes to both sides.",
+    "sources": [
+      "fable-nemotron-cp-cpp",
+      "fable-nemotron-cp-python",
+      "fable-nemotron-cp-text-to-sql",
+      "fable-nemotron-sft-opencode-v1"
+    ],
+    "training_banks": 9,
+    "evaluation_banks": 4,
+    "rows_per_bank": 512,
+    "mtp_pairs_per_bank": 511,
+    "training_pairs_total": 4599,
+    "evaluation_pairs_total": 2044,
+    "collection": "Strata native verifier collector at revision d2d6e413 on the Strix RTX 5070 Laptop GPU, the same flags and semantics as the original bank.",
+    "disjointness": "The four evaluation prompts have group_ids that appear in no training prompt, and every one of the 13 banks has a distinct logits SHA-256.",
+    "bank_hash_verification": "All 52 bank files on the A6000 were checked against a locally generated SHA-256 manifest and every one matched.",
+    "embedding_service": "The resident 127.0.0.1:1236 service stayed at 2538 MiB throughout collection."
+  },
+  "recipe_changes": {
+    "multi_bank_mixing": "mlx_gptq.flashnext_mtp.py adds MixedNativeMTPPairDataset, which concatenates banks while keeping each bank's own two-ahead pairing. The trainer's --bank flag became repeatable.",
+    "teacher_confidence_floor": "clamped_teacher_probability caps the teacher's top probability at a floor by mixing toward the uniform distribution over the tokens that carry mass, and bounds the logit range at 30. The argmax is never changed.",
+    "base_anchor": "anchor_regularizer adds an explicit KL pull toward the frozen base head so the adapter cannot drift arbitrarily far from a head that is already a good drafter.",
+    "evaluation_extension": "The evaluator accepts repeated --bank flags, mixes the banks, and attributes every pair to its source bank."
+  },
+  "results": {
+    "heldout_exact": {
+      "base": {
+        "loss_ce": 8.898797825855018,
+        "loss_tv": 0.9414502992689994,
+        "loss_kl": 8.293738783583505,
+        "top1_match": 0.048434442270058706
+      },
+      "candidate": {
+        "loss_ce": 3.6311201841560528,
+        "loss_tv": 0.6402141174196802,
+        "loss_kl": 3.026061052209977,
+        "top1_match": 0.3840508806262231
+      },
+      "delta": {
+        "loss_ce": -5.267677641698965,
+        "loss_tv": -0.3012361818493192,
+        "loss_kl": -5.267677731373528,
+        "top1_match": 0.3356164383561644
+      },
+      "paired_test": {
+        "pairs": 2044,
+        "top1_candidate_wins": 709,
+        "top1_candidate_losses": 23,
+        "top1_ties": 1312,
+        "mcnemar_exact_p_value": 1.9096198877642062e-177,
+        "ce_mean_difference": -5.267677641698966,
+        "ce_difference_ci95": [
+          -5.481299877166748,
+          -5.066643714904785
+        ],
+        "ce_difference_ci95_excludes_zero": true
+      }
+    },
+    "heldout_floor_0_995": {
+      "candidate": {
+        "loss_ce": 3.597179963976606,
+        "loss_tv": 0.6482470909658333,
+        "loss_kl": 2.99212084722918,
+        "top1_match": 0.37573385518590996
+      },
+      "delta": {
+        "loss_ce": -5.301617861878412,
+        "loss_tv": -0.29320320830316604,
+        "loss_kl": -5.301617936354325,
+        "top1_match": 0.32729941291585124
+      },
+      "paired_test": {
+        "pairs": 2044,
+        "top1_candidate_wins": 695,
+        "top1_candidate_losses": 26,
+        "top1_ties": 1323,
+        "mcnemar_exact_p_value": 5.990955005668261e-170,
+        "ce_mean_difference": -5.301617861878413,
+        "ce_difference_ci95": [
+          -5.508768081665039,
+          -5.103626251220703
+        ],
+        "ce_difference_ci95_excludes_zero": true
+      }
+    },
+    "heldout_floor_0_98": {
+      "candidate": {
+        "loss_ce": 3.557494895271533,
+        "loss_tv": 0.6635191512075322,
+        "loss_kl": 2.952435773967414,
+        "top1_match": 0.3698630136986301
+      },
+      "delta": {
+        "loss_ce": -5.341302930583485,
+        "loss_tv": -0.2779311480614671,
+        "loss_kl": -5.341303009616091,
+        "top1_match": 0.3214285714285714
+      },
+      "paired_test": {
+        "pairs": 2044,
+        "top1_candidate_wins": 681,
+        "top1_candidate_losses": 24,
+        "top1_ties": 1339,
+        "mcnemar_exact_p_value": 3.0360362792328796e-168,
+        "ce_mean_difference": -5.341302930583486,
+        "ce_difference_ci95": [
+          -5.5443291664123535,
+          -5.14711332321167
+        ],
+        "ce_difference_ci95_excludes_zero": true
+      }
+    },
+    "comparison_to_single_prompt_draft": {
+      "single_prompt_same_corpus_top1": 0.6046966731898239,
+      "single_prompt_heldout_top1": 0.18395303326810175,
+      "single_prompt_gap_points": 42.074364,
+      "mixed_same_corpus_top1": 0.40805223068552776,
+      "mixed_heldout_top1": 0.3840508806262231,
+      "mixed_gap_points": 2.4,
+      "interpretation": "The same-corpus number fell and the held-out number rose. The memorization component was removed, not the capability."
+    },
+    "clamping_verdict": "Clamping the teacher peak was measured and rejected. It trades a small cross-entropy gain for a top-1 loss, and the held-out top-1 falls monotonically as the floor tightens: none 38.41%, 0.995 37.57%, 0.98 36.99%. The published artifact uses the exact verifier distribution."
+  },
+  "training_run": {
+    "device": "NVIDIA RTX A6000",
+    "dtype": "float16",
+    "attention": "sdpa",
+    "steps": 3680,
+    "training_pairs": 3680,
+    "validation_pairs": 919,
+    "wall_clock": "13:31.72",
+    "elapsed_seconds": 657.7877187728882,
+    "overflow_count": 4,
+    "wandb_run_id": "7usmzusc",
+    "wandb_url": "https://forge.coreweave.com/wandb/retis_labs/flashnext-mtp-mxfp4-qat/runs/7usmzusc"
+  },
+  "clamp_arms": [
+    {
+      "confidence_floor": 0.98,
+      "wandb_run_id": "7w4s3dyj",
+      "wall_clock": "11:45.74",
+      "heldout_top1": 0.3698630136986301
+    },
+    {
+      "confidence_floor": 0.995,
+      "wandb_run_id": "d5ztqlfh",
+      "wall_clock": "14:08.82",
+      "heldout_top1": 0.37573385518590996
+    }
+  ],
+  "publication": {
+    "repository": "RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft",
+    "url": "https://huggingface.co/RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft",
+    "private": true,
+    "commit": "c9a1fbb41d62eda8321f670ae48bea6630666c8d",
+    "replaces": "The previous single-prompt draft commit fa73cf8b5ad217163c86c8e85b3f0f2e4797f277.",
+    "round_trip_verification": "The two safetensors artifacts, the held-out evaluation, and the model card were downloaded back from the Hub and their SHA-256 values match the local files exactly.",
+    "sha256": {
+      "flashnext_mtp_lora.safetensors": "0c384b727587cba7a685d7de5374f2a0369def696f605d3213e863b75044ab9e",
+      "flashnext_mtp_mxfp4_qat.safetensors": "ab64178b98858c403ecf53ec8d48e002b305f86720c8d15b963f59bd40a5d3c1",
+      "heldout-evaluation.json": "7e63451f67df73a421f7cf1908302bafe0bb813b06e7bd05f62171a874877e11",
+      "README.md": "09e370b21844c9b8bf046e886a1ff27179f0bd5ba94ee9655266476db94f626d"
+    }
+  },
+  "infrastructure": {
+    "prime_pod": "9c29b8990fd44bb7965d892058fcf230",
+    "offering": "A6000_48GB x1 on-demand",
+    "price_usd_per_hour": 0.54,
+    "pod_cost_usd": 1.95,
+    "wallet_balance_after_usd": 32.02,
+    "terminated": true,
+    "pods_after_termination": 0,
+    "strix_note": "Strix dropped off both its LAN and ZeroTier addresses during the run, so the banks were moved through the pod instead. Its embedding service was not disturbed."
+  },
+  "checks": [
+    {
+      "command": "uv run --frozen --extra dev python -m pytest tests -q",
+      "exit_code": 0,
+      "result": "100 passed, 15 skipped locally; 22 focused tests passed on the A6000."
+    },
+    {
+      "command": "just quality",
+      "exit_code": 0,
+      "result": "Root lint, root tests, DFlash runtime tests, campaign tests, and the CUDA probe compile all passed."
+    },
+    {
+      "command": "sha256sum -c mixed-bank-manifest.sha256 on the pod",
+      "exit_code": 0,
+      "result": "All 52 bank files across the 13 banks matched."
+    },
+    {
+      "command": "sha256sum -c source-manifest.sha256 on the pod",
+      "exit_code": 0,
+      "result": "All 32 pinned model source files matched the local Hub revision."
+    },
+    {
+      "command": "curl the published artifacts back from the Hub and compare SHA-256",
+      "exit_code": 0,
+      "result": "All four published files match the local files."
+    },
+    {
+      "command": "just quality",
+      "exit_code": 0,
+      "result": "Root lint, root tests, DFlash runtime tests, campaign tests, and the CUDA probe compile all passed. One earlier run failed only in runtime/dflash-mlx/tests/test_benchmark_cli.py::test_benchmark_cooldown_applies_between_baseline_and_dflash, a timing-sensitive cooldown test in a subtree this work does not touch. It passed three times in isolation and the full runtime suite then passed 1274 tests, so it is flaky under load rather than a regression."
+    }
+  ],
+  "non_claims": [
+    "Teacher-logit agreement is a proxy for draft quality; it is not live speculative acceptance and not output-quality parity with the target.",
+    "Nine training prompts and four evaluation prompts is a small sample, and the evaluation prompts come from the same four corpora as the training prompts, so this bounds prompt generalization within those corpora rather than across the whole distribution.",
+    "The mixed head still scores lower on its own training corpus than the single-prompt head did on its own prompt, so it is not a better drafter for any one prompt.",
+    "The candidate is not integrated into any serving runtime, so no latency, throughput, or end-to-end quality claim is made.",
+    "The base anchor was implemented and tested but was not exercised in a training arm, so no claim is made about it.",
+    "The published repository is private and remains a draft."
+  ]
+}
