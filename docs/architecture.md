@@ -152,6 +152,17 @@ provenance and non-claims is not accepted.
   is unchanged, so the fix changed connection behavior and not output. See
   `evidence/2026-10-21-http-server-backlog-hardening.md`.
 
+## 2026-10-22 work log
+
+- Recovered the Flint state after the Mac's button-sequence reset. The MLX-LM
+  adapter and stack are committed and remote-matched; B550 completed all 49
+  real-checkpoint GPTQ-MXFP4 calibration layers, the 20 GB artifacts were
+  copied and hash-matched, and the full five-shard 21 GiB model was packed
+  through its load-and-generate verification path. Post-restart adapter and
+  calibration tests passed. Quality evaluation and publication remain open.
+  The reset diagnostic proves a forced reset path but not the original stall
+  cause. See `evidence/2026-10-22-flint-post-restart-status.md`.
+
 ## Contracts to preserve
 
 - E2M1 uint32 words use MLX's LSB-first `4*i` layout; byte operands use low
