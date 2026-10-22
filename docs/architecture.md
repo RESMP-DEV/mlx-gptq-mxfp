@@ -167,6 +167,30 @@ live speculative acceptance, throughput A/B, rollout flag, or rollback receipt
 exists. The verdict is therefore offline-validated but production NO-GO. Full
 evidence: `evidence/2026-10-22-flashnext-mtp-production-validation.json`.
 
+## 2026-10-22 Flash-Next MTP matching-bpw format selection
+
+The trained MXFP4 grid stores 17 bytes per 32 weights (4.25 bpw). Q4_0,
+IQ4_NL, and Q4_K all consume 4.5 bpw, while IQ4_XS consumes 136 bytes per 256
+weights and is the exact 4.25-bpw GGML geometry. Because four tuned matrices
+have 320/640-column rows, IQ4_XS cannot cover 12.855% of the tuned weights;
+the measured policy uses IQ4_NL for those four tensors and averages
+4.28214 bpw.
+
+All comparisons used the production `ggml_quantize_chunk` entrypoint without
+an importance matrix and the same 2,044 group-disjoint pairs. Base top-1 is
+4.8434% and MXFP4 is 38.3072%. The mixed IQ4_XS policy reaches 37.867%,
+retaining 98.68% of MXFP4's absolute top-1 gain. Q4_0 reaches 37.622%, IQ4_NL
+37.476%, Q4_K 37.280%, and IQ3_S collapses to 25.783%. Q4_0 has slightly lower
+cross-entropy, but IQ4_XS is the proper matching-bpw target for argmax draft
+transfer because it has the best top-1 result at less effective storage.
+
+The selected packed artifact contains all 18 tuned modules, covers
+89,210,880 weights in 47,754,584 bytes, and round-trips from its saved blocks
+to the same metrics. `IQ3_XS` is only a llama-quantize alias for IQ3_S in this
+pinned GGML stack, not a distinct geometry. This is still not a complete
+Strata rt_dir and does not measure live acceptance. Full evidence:
+`evidence/2026-10-22-flashnext-mtp-iq4xs-format-selection.json`.
+
 ## Contracts to preserve
 
 - E2M1 uint32 words use MLX's LSB-first `4*i` layout; byte operands use low

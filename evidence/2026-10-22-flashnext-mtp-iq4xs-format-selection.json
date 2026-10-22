@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-22T19:25:00Z",
+  "operator": "Codex",
+  "scope": "Select a GGML low-bit export format whose effective bits per weight match the 4.25-bpw Flash-Next MTP MXFP4 QAT grid and measure held-out drop-off.",
+  "source_revision": "7844cfac7cf0b7d9220d7cd805c1c03874e8c825",
+  "source_dirty": true,
+  "selection_rule": "Prefer an exact or near-exact storage-geometry match before considering runtime convenience; runtime support can be added deliberately.",
+  "native_quantizer": {
+    "library": "/Users/kearm/Strata/build/llama-tools/bin/libggml-base.0.24.0.dylib",
+    "sha256": "a1e4c0d0444544c47829fa787c7061e72d7a06e37fab3b6f9e3c84cca9e033a3",
+    "entrypoint": "ggml_quantize_chunk",
+    "importance_matrix": false,
+    "note": "The production IQ4_NL path uses a seven-pass scale search and differs deliberately from quantize_row_iq4_nl_ref; all comparisons use ggml_quantize_chunk."
+  },
+  "storage_geometries": {
+    "trained_mxfp4": {
+      "block_values": 32,
+      "block_bytes": 17,
+      "bits_per_weight": 4.25
+    },
+    "iq4_xs": {
+      "block_values": 256,
+      "block_bytes": 136,
+      "bits_per_weight": 4.25
+    },
+    "iq4_nl": {
+      "block_values": 32,
+      "block_bytes": 18,
+      "bits_per_weight": 4.5
+    },
+    "q4_0": {
+      "block_values": 32,
+      "block_bytes": 18,
+      "bits_per_weight": 4.5
+    },
+    "q4_k": {
+      "block_values": 256,
+      "block_bytes": 144,
+      "bits_per_weight": 4.5
+    },
+    "iq3_s": {
+      "block_values": 256,
+      "block_bytes": 110,
+      "bits_per_weight": 3.4375
+    },
+    "iq3_xxs": {
+      "block_values": 256,
+      "block_bytes": 98,
+      "bits_per_weight": 3.0625
+    }
+  },
+  "mixed_policy": {
+    "reason": "IQ4_XS and Q4_K require columns divisible by 256. Four tuned matrices have 320- or 640-column rows and cover 12.855% of the 89,210,880 tuned weights; those matrices use IQ4_NL.",
+    "iq4_xs_effective_bits_per_weight": 4.282139577594123,
+    "q4_k_effective_bits_per_weight": 4.5,
+    "iq3_s_effective_bits_per_weight": 3.574093204775023
+  },
+  "evaluation": {
+    "device": "M4 Max MPS",
+    "dtype": "float16",
+    "attention": "sdpa",
+    "pairs": 2044,
+    "base_top1_match": 0.048434442270058706,
+    "mxfp4_top1_match": 0.3830724070450098,
+    "results": [
+      {
+        "format": "iq4_xs+iq4_nl fallback",
+        "effective_bits_per_weight": 4.282139577594123,
+        "top1_match": 0.3786692759295499,
+        "loss_ce": 3.7228468741538907,
+        "retained_mxfp4_top1_gain": 0.986842105263158,
+        "versus_base_p_value": 2.74740545574234e-174,
+        "versus_mxfp4_top1_wins_losses": [45, 54]
+      },
+      {
+        "format": "q4_0",
+        "effective_bits_per_weight": 4.5,
+        "top1_match": 0.37622309197651665,
+        "loss_ce": 3.67517336229544,
+        "retained_mxfp4_top1_gain": 0.9795321637426901,
+        "versus_base_p_value": 4.3143713819354855e-171,
+        "versus_mxfp4_top1_wins_losses": [49, 63]
+      },
+      {
+        "format": "iq4_nl",
+        "effective_bits_per_weight": 4.5,
+        "top1_match": 0.3747553816046967,
+        "loss_ce": 3.7157385472572684,
+        "retained_mxfp4_top1_gain": 0.9751461988304094,
+        "versus_base_p_value": 8.119315447537413e-174,
+        "versus_mxfp4_top1_wins_losses": [41, 58]
+      },
+      {
+        "format": "q4_k+iq4_nl fallback",
+        "effective_bits_per_weight": 4.5,
+        "top1_match": 0.37279843444227007,
+        "loss_ce": 3.729139683260744,
+        "retained_mxfp4_top1_gain": 0.9692982456140351,
+        "versus_base_p_value": 1.4719708143642194e-174,
+        "versus_mxfp4_top1_wins_losses": [40, 61]
+      },
+      {
+        "format": "iq3_s+iq4_nl fallback",
+        "effective_bits_per_weight": 3.574093204775023,
+        "top1_match": 0.25782778864970646,
+        "loss_ce": 4.952789671729056,
+        "retained_mxfp4_top1_gain": 0.625730994152346,
+        "versus_base_p_value": 2.6087782669690332e-95,
+        "versus_mxfp4_top1_wins_losses": [70, 326]
+      }
+    ]
+  },
+  "selected_artifact": {
+    "format": "IQ4_XS with four IQ4_NL fallback matrices",
+    "path": "build/production-validation/flashnext_mtp_iq4_xs.safetensors",
+    "sha256": "252d76f66f57917baa7b1db0c9c29c460ad0f2429135e958770547ecb7a4acf2",
+    "bytes": 47754584,
+    "module_count": 18,
+    "total_weights": 89210880,
+    "effective_bits_per_weight": 4.282139577594123,
+    "saved_file_round_trip": {
+      "pairs": 2044,
+      "top1_match": 0.3786692759295499,
+      "loss_ce": 3.7228468741538907,
+      "loss_tv": 0.6475951063494457,
+      "candidate_wins_vs_base": 698,
+      "candidate_losses_vs_base": 23,
+      "mcnemar_exact_p_value": 2.74740545574234e-174,
+      "result": "Bitwise-equivalent metrics to the in-memory comparator; evaluation loaded the saved packed blocks and metadata."
+    }
+  },
+  "decision": "IQ4_XS is the proper target for transferring the 4.25-bpw MXFP4 QAT behavior. It is closest in effective storage geometry and gives the best held-out top-1 among measured formats. Q4_0 has slightly better CE but lower top-1 and 4.5 bpw; for argmax speculative proposals top-1 is the primary transfer metric. IQ3_S is too lossy here.",
+  "checks": [
+    {
+      "command": "uv run --frozen --extra dev pytest tests/test_ggml_native.py tests/test_flashnext_mtp_eval.py -q",
+      "exit_code": 0,
+      "result": "7 focused tests passed after removing the duplicate hand-written Q4 path and adding saved GGML-block loading coverage."
+    },
+    {
+      "command": "scripts/evaluate_flashnext_mtp_quant_formats.py ... --format iq4_xs iq4_nl q4_0 q4_k iq3_s",
+      "exit_code": 0,
+      "result": "All five native format arms completed over 2,044 pairs."
+    },
+    {
+      "command": "scripts/export_flashnext_mtp_ggml.py ... --format iq4_xs",
+      "exit_code": 0,
+      "result": "Packed 18 modules into a 47,754,584-byte artifact."
+    },
+    {
+      "command": "python -m mlx_gptq.flashnext_mtp_eval --ggml flashnext_mtp_iq4_xs.safetensors ...",
+      "exit_code": 0,
+      "result": "Saved-file round trip reproduced the in-memory IQ4_XS metrics exactly."
+    }
+  ],
+  "non_claims": [
+    "This remains teacher-logit agreement, not live speculative acceptance or end-to-end output quality.",
+    "The selected file is not a complete Strata rt_dir and no new Strata kernel/loader integration has been built.",
+    "IQ3_XS is a llama-quantize alias for IQ3_S in the pinned GGML stack, not a separate storage geometry.",
+    "The mixed IQ4_XS policy is 4.28214 effective bpw, not exactly 4.25, because 12.855% of tuned weights live in 320/640-column matrices incompatible with 256-wide superblocks.",
+    "No importance matrix was used; calibration-aware GGML selection remains unmeasured.",
+    "The held-out retrieval test split was not read."
+  ]
+}

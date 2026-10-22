@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from safetensors import safe_open
 from safetensors.torch import load_file
 
 from .flashnext_mtp import (
@@ -24,6 +25,7 @@ from .flashnext_mtp import (
 )
 from .flashnext_mtp_model import FlashNextMTP
 from .flashnext_mtp_train import split_pairs
+from .ggml_native import GGML_FORMATS, NativeGGMLQuantizer
 from .grid import dequantize_mxfp
 
 
@@ -64,6 +66,63 @@ def load_candidate(
         "qat_tensors": len(qat),
         "mxfp4_quantization_max_absolute_error": max_absolute,
         "mxfp4_quantization_max_relative_error": max_relative,
+    }
+
+
+def load_ggml_candidate(
+    model: FlashNextMTP, ggml_path: Path, library: Path
+) -> dict[str, Any]:
+    """Apply a native-GGML packed candidate and its per-module format map."""
+    with safe_open(str(ggml_path), framework="pt", device="cpu") as handle:
+        metadata = handle.metadata() or {}
+        artifact = {key: handle.get_tensor(key) for key in handle.keys()}
+    module_formats = json.loads(metadata.get("module_formats", "{}"))
+    expected_keys = {f"{name}.blocks" for name in module_formats}
+    if set(artifact) != expected_keys:
+        raise ValueError(
+            f"GGML artifact/module-format mismatch in {ggml_path}: "
+            f"tensors {sorted(artifact)} versus modules {sorted(expected_keys)}"
+        )
+    quantizer = NativeGGMLQuantizer(str(library))
+    applied = 0
+    applied_names: list[str] = []
+    for name, module in model.named_modules():
+        if not isinstance(module, torch.nn.Linear):
+            continue
+        key = f"{name}.blocks"
+        if key not in artifact:
+            continue
+        format_name = module_formats.get(name)
+        if format_name not in GGML_FORMATS:
+            raise ValueError(f"{key} has no valid GGML format metadata")
+        dequantized = quantizer.dequantize_blocks(
+            artifact[key].cpu(), GGML_FORMATS[format_name]
+        )
+        if tuple(dequantized.shape) != tuple(module.weight.shape):
+            raise ValueError(
+                f"{key} shape {tuple(dequantized.shape)} does not match "
+                f"{tuple(module.weight.shape)}"
+            )
+        if not bool(dequantized.isfinite().all()):
+            raise ValueError(f"{key} contains non-finite dequantized values")
+        with torch.no_grad():
+            module.weight.copy_(
+                dequantized.to(module.weight.dtype).to(module.weight.device)
+            )
+        applied += 1
+        applied_names.append(name)
+    if set(applied_names) != set(module_formats):
+        raise ValueError(
+            "GGML artifact modules do not match the model: "
+            f"applied {sorted(applied_names)}, expected {sorted(module_formats)}"
+        )
+    if applied == 0:
+        raise ValueError(f"no GGML module blocks found in {ggml_path}")
+    return {
+        "candidate_source": "native_ggml",
+        "requested_format": metadata.get("requested_format"),
+        "applied_modules": applied,
+        "artifact_tensors": len(artifact),
     }
 
 
@@ -202,6 +261,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--lora", type=Path)
     parser.add_argument("--qat", type=Path)
+    parser.add_argument(
+        "--ggml",
+        type=Path,
+        help="A native-GGML packed candidate; requires --ggml-library.",
+    )
+    parser.add_argument(
+        "--ggml-library",
+        type=Path,
+        help="Path to libggml-base for --ggml.",
+    )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--dtype", choices=("bfloat16", "float16"), default="bfloat16")
@@ -221,6 +290,13 @@ def build_parser() -> argparse.ArgumentParser:
 def run(arguments: argparse.Namespace) -> int:
     started = time.time()
     dtype = getattr(torch, arguments.dtype)
+    if arguments.ggml and (arguments.lora or arguments.qat):
+        raise ValueError("choose either --ggml or both --lora and --qat")
+    if bool(arguments.lora) != bool(arguments.qat):
+        raise ValueError("--lora and --qat must be supplied together")
+    if bool(arguments.ggml) != bool(arguments.ggml_library):
+        raise ValueError("--ggml and --ggml-library must be supplied together")
+    has_candidate = bool(arguments.ggml or (arguments.lora and arguments.qat))
     banks = [NativeMTPBank(Path(path)) for path in arguments.bank]
     bank = banks[0] if len(banks) == 1 else None
     dataset: Any = (
@@ -248,7 +324,6 @@ def run(arguments: argparse.Namespace) -> int:
         attention_implementation=arguments.attention,
     )
     base = evaluate(model, dataset, indices, arguments.device, dtype)
-    has_candidate = bool(arguments.lora and arguments.qat)
     base_records = (
         per_pair(model, dataset, indices, arguments.device, dtype)
         if has_candidate
@@ -280,7 +355,14 @@ def run(arguments: argparse.Namespace) -> int:
         "base": base,
     }
     if has_candidate:
-        result["candidate_load"] = load_candidate(model, arguments.lora, arguments.qat)
+        if arguments.ggml:
+            result["candidate_load"] = load_ggml_candidate(
+                model, arguments.ggml, arguments.ggml_library
+            )
+        else:
+            result["candidate_load"] = load_candidate(
+                model, arguments.lora, arguments.qat
+            )
         result["candidate"] = evaluate(model, dataset, indices, arguments.device, dtype)
         result["delta"] = {key: result["candidate"][key] - base[key] for key in base}
         candidate_records = per_pair(model, dataset, indices, arguments.device, dtype)
