@@ -14,6 +14,7 @@ from mlx_gptq.flashnext_mtp_train import (
     install_lora,
     loss_and_metrics,
     mtp_batch,
+    split_banks,
     split_pairs,
 )
 
@@ -183,3 +184,27 @@ def test_anchor_regularizer_penalizes_drift() -> None:
     student = torch.tensor([[0.0, 1.0]])
     base = torch.tensor([[1.0, 0.0]])
     assert float(anchor_regularizer(student, base, 1.0)) > 0.0
+
+
+def test_split_banks_holds_out_whole_banks() -> None:
+    training, validation = split_banks(9, 0.34, seed=73)
+    assert len(training) == 6
+    assert len(validation) == 3
+    assert set(training).isdisjoint(validation)
+    assert set(training) | set(validation) == set(range(9))
+
+
+def test_split_banks_always_keeps_one_training_bank() -> None:
+    training, validation = split_banks(2, 0.5, seed=73)
+    assert len(training) == 1
+    assert len(validation) == 1
+    assert set(training).isdisjoint(validation)
+
+
+def test_split_banks_needs_at_least_two_banks() -> None:
+    try:
+        split_banks(1, 0.5, seed=73)
+    except ValueError as error:
+        assert "at least two banks" in str(error)
+    else:
+        raise AssertionError("expected a ValueError for a single bank")

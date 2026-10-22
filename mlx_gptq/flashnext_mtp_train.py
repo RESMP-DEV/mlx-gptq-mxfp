@@ -285,6 +285,28 @@ def split_pairs(
     return training, validation
 
 
+def split_banks(
+    bank_count: int, validation_fraction: float, seed: int
+) -> tuple[list[int], list[int]]:
+    """Hold out whole banks, so validation measures unseen prompts.
+
+    Splitting rows at random would let a bank contribute to both sides, and a
+    prompt's rows are strongly correlated, so a row-level split reports the
+    training prompt's own fit rather than generalization.  Holding out whole
+    banks makes the validation set a set of prompts the head never saw.
+    """
+    if bank_count < 2:
+        raise ValueError("a per-bank validation split needs at least two banks")
+    indices = list(range(bank_count))
+    random.Random(seed).shuffle(indices)
+    validation_count = max(
+        1, min(bank_count - 1, int(bank_count * validation_fraction))
+    )
+    validation = sorted(indices[:validation_count])
+    training = sorted(indices[validation_count:])
+    return training, validation
+
+
 def mtp_batch(
     pair: dict[str, torch.Tensor], device: str, dtype: torch.dtype
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -353,6 +375,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ce-weight", type=float, default=0.1)
     parser.add_argument("--tv-weight", type=float, default=0.9)
     parser.add_argument("--validation-fraction", type=float, default=0.2)
+    parser.add_argument(
+        "--hold-out-banks",
+        action="store_true",
+        help=(
+            "Hold out whole banks for validation so the validation set is a "
+            "set of prompts the head never saw."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=73)
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "offline", "online"), default="offline"
@@ -382,11 +412,40 @@ def run(arguments: argparse.Namespace) -> int:
         if arguments.limit <= 0
         else list(range(min(arguments.limit, len(dataset))))
     )
-    train_indices, validation_indices = split_pairs(
-        len(selected), arguments.validation_fraction, arguments.seed
-    )
-    train_indices = [selected[index] for index in train_indices]
-    validation_indices = [selected[index] for index in validation_indices]
+    if arguments.hold_out_banks:
+        # Hold out whole banks so validation measures unseen prompts.
+        pairs_per_bank = (
+            dataset.per_bank_counts()
+            if isinstance(dataset, MixedNativeMTPPairDataset)
+            else [len(dataset)]
+        )
+        training_banks, validation_banks = split_banks(
+            len(pairs_per_bank), arguments.validation_fraction, arguments.seed
+        )
+        train_indices = []
+        validation_indices = []
+        for bank_index in training_banks:
+            start = sum(pairs_per_bank[:bank_index])
+            train_indices.extend(range(start, start + pairs_per_bank[bank_index]))
+        for bank_index in validation_banks:
+            start = sum(pairs_per_bank[:bank_index])
+            validation_indices.extend(range(start, start + pairs_per_bank[bank_index]))
+        train_indices = [
+            selected[index] for index in train_indices if index < len(selected)
+        ]
+        validation_indices = [
+            selected[index] for index in validation_indices if index < len(selected)
+        ]
+        if not train_indices or not validation_indices:
+            raise ValueError(
+                "the per-bank hold-out left no training or validation pairs"
+            )
+    else:
+        train_indices, validation_indices = split_pairs(
+            len(selected), arguments.validation_fraction, arguments.seed
+        )
+        train_indices = [selected[index] for index in train_indices]
+        validation_indices = [selected[index] for index in validation_indices]
 
     model = FlashNextMTP.from_checkpoint(
         Path(arguments.checkpoint),
@@ -532,6 +591,7 @@ def run(arguments: argparse.Namespace) -> int:
         "confidence_floor": arguments.confidence_floor,
         "anchor_weight": arguments.anchor_weight,
         "bank_count": len(banks),
+        "hold_out_banks": arguments.hold_out_banks,
         "gradient_checkpointing": arguments.gradient_checkpointing,
         "fp16_initial_scale": arguments.fp16_initial_scale,
         "final_loss_scale": float(scaler.get_scale()),
