@@ -101,7 +101,9 @@ def _gptq_quantize_mxfp_groupwise(
 
         if algorithm == "groupwise":
             scale_bytes, scale_values = choose_mxfp_scale(original, mode)
-            baseline_q = baseline_dq = best_objective = None
+            baseline_q, baseline_dq = quantize_mxfp_with_scale(
+                original, scale_values, mode
+            )
         else:
             base_bytes, _ = choose_mxfp_scale(original, mode)
             base_exponents = base_bytes.to(torch.int32) - 127
@@ -167,6 +169,11 @@ def _gptq_quantize_mxfp_groupwise(
             use_gptq = gptq_objective <= best_objective
             selected_q = torch.where(use_gptq.unsqueeze(-1), gptq_q, baseline_q)
             selected_dq = torch.where(use_gptq.unsqueeze(-1), gptq_dq, baseline_dq)
+        source_max = original.abs().amax(dim=-1, keepdim=True)
+        limit = torch.maximum(source_max * 32.0, torch.full_like(source_max, 2**-126))
+        valid = (selected_dq.abs() <= limit).all(dim=-1, keepdim=True)
+        selected_q = torch.where(valid, selected_q, baseline_q)
+        selected_dq = torch.where(valid, selected_dq, baseline_dq)
         q_out[:, :, start:end] = selected_q
         W[:, :, start:end] = selected_dq
 

@@ -2,7 +2,6 @@
 
 import pytest
 import torch
-
 from mlx_gptq.gptq import solve_gptq
 from mlx_gptq.grid import dequantize_artifact, rtn_quantize, rtn_quantize_mxfp
 
@@ -30,11 +29,14 @@ def test_gptq_beats_rtn_on_output_error():
 def test_gptq_dequant_consistency():
     """W_dq must equal exactly q*scale+bias with the emitted params."""
     W, H, _ = _setup(B=1, R=8, C=64)
-    q, s, b, W_dq, _ = solve_gptq(W, H, bits=4, group_size=32,
-                                  storage_dtype=torch.float32)
+    q, s, b, W_dq, _ = solve_gptq(
+        W, H, bits=4, group_size=32, storage_dtype=torch.float32
+    )
     G = 32
-    manual = (q.float().reshape(1, 8, -1, G) * s.float().unsqueeze(-1)
-              + b.float().unsqueeze(-1)).reshape(1, 8, 64)
+    manual = (
+        q.float().reshape(1, 8, -1, G) * s.float().unsqueeze(-1)
+        + b.float().unsqueeze(-1)
+    ).reshape(1, 8, 64)
     assert torch.allclose(manual, W_dq, atol=1e-5)
     assert int(q.max()) <= 15
 
@@ -42,7 +44,8 @@ def test_gptq_dequant_consistency():
 def test_gptq_batch_independent():
     """Batched solve must equal per-item solves."""
     W, H, _ = _setup(B=2)
-    H1 = H.clone(); H1[1] *= 3.0  # make items differ
+    H1 = H.clone()
+    H1[1] *= 3.0  # make items differ
     qb, sb, bb, _, _ = solve_gptq(W, H1, bits=4, group_size=32)
     q0, s0, b0, _, _ = solve_gptq(W[:1], H1[:1], bits=4, group_size=32)
     assert torch.equal(qb[0], q0[0])
@@ -57,13 +60,29 @@ def test_gptq_zero_hessian_falls_back():
     assert torch.isfinite(W_dq).all()
 
 
+def test_mxfp_gptq_stays_within_source_range_for_bad_hessian():
+    torch.manual_seed(19)
+    W = torch.randn(1, 32, 128) * 0.02
+    H = torch.zeros(1, 128, 128)
+    H[0, torch.arange(128), torch.arange(128)] = torch.linspace(-1.0, 1.0, 128)
+    _, scales, _, W_dq, _ = solve_gptq(
+        W,
+        H,
+        bits=4,
+        group_size=32,
+        mode="mxfp4",
+        mxfp_algorithm="safe-scale-search",
+    )
+    assert torch.isfinite(W_dq).all()
+    assert float(W_dq.abs().max()) <= float(W.abs().max() * 32.0)
+    assert int(scales.max()) < 250
+
+
 @torch.no_grad()
 @pytest.mark.parametrize("mode,bits", [("mxfp4", 4), ("mxfp8", 8)])
 def test_mxfp_gptq_dequant_consistency(mode, bits):
     W, H, _ = _setup(B=1, R=8, C=64)
-    q, s, b, W_dq, rel = solve_gptq(
-        W, H, bits=bits, group_size=32, mode=mode
-    )
+    q, s, b, W_dq, rel = solve_gptq(W, H, bits=bits, group_size=32, mode=mode)
     manual = dequantize_artifact(q, s, b, mode, 32)
     assert b is None and s.dtype == torch.uint8
     assert torch.equal(manual, W_dq)
@@ -75,9 +94,7 @@ def test_mxfp_gptq_dequant_consistency(mode, bits):
 @pytest.mark.parametrize("mode,bits", [("mxfp4", 4), ("mxfp8", 8)])
 def test_mxfp_gptq_improves_activation_error(mode, bits):
     W, H, X = _setup(B=1, R=32, C=128, N=1024, seed=11)
-    _, _, _, W_gptq, _ = solve_gptq(
-        W, H, bits=bits, group_size=32, mode=mode
-    )
+    _, _, _, W_gptq, _ = solve_gptq(W, H, bits=bits, group_size=32, mode=mode)
     _, _, _, W_rtn = rtn_quantize_mxfp(W, mode)
     err_gptq = ((X @ (W_gptq - W).transpose(1, 2)) ** 2).mean()
     err_rtn = ((X @ (W_rtn - W).transpose(1, 2)) ** 2).mean()
