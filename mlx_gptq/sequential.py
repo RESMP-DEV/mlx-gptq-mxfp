@@ -109,9 +109,9 @@ def materialize_module(
                 if kind == "gate_up_proj":
                     g = shards.get(f"{prefix}.{base}.{e}.gate_proj.weight").to(dtype)
                     u = shards.get(f"{prefix}.{base}.{e}.up_proj.weight").to(dtype)
-                    I = g.shape[0]
-                    fused[e, :I] = g
-                    fused[e, I:] = u
+                    intermediate = g.shape[0]
+                    fused[e, :intermediate] = g
+                    fused[e, intermediate:] = u
                 else:
                     fused[e] = shards.get(f"{prefix}.{base}.{e}.{kind}.weight").to(
                         dtype
@@ -619,8 +619,10 @@ class Pipeline:
         # Solve fused experts (the bulk) first, then the dense linears.
         for task in mgr.fused_tasks:
             run_fused(task)
-        with ThreadPoolExecutor(max_workers=len(devices)) as ex:
-            list(ex.map(run_linear, mgr.linear_tasks))
+        # Sibling linears can share a stash and its mutable Hessian cache.
+        # Keep their small solves serial after the parallel expert phase.
+        for task in mgr.linear_tasks:
+            run_linear(task)
         return result
 
     @torch.no_grad()
