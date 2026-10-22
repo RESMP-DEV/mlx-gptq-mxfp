@@ -41,12 +41,13 @@ def load_candidate(
             continue
         if f"{name}.a" not in lora:
             continue
-        weight_a = lora[f"{name}.a"].float()
-        weight_b = lora[f"{name}.b"].float()
+        device = module.weight.device
+        weight_a = lora[f"{name}.a"].float().to(device)
+        weight_b = lora[f"{name}.b"].float().to(device)
         scaling = float(lora[f"{name}.scaling"].float().reshape(-1)[0])
         effective = module.weight.float() + (weight_b @ weight_a) * scaling
-        codes = qat[f"{name}.q"]
-        scales = qat[f"{name}.scales"]
+        codes = qat[f"{name}.q"].to(device)
+        scales = qat[f"{name}.scales"].to(device)
         dequantized = dequantize_mxfp(codes, scales, "mxfp4").reshape(effective.shape)
         error = (dequantized - effective).abs()
         max_absolute = max(max_absolute, error.max().item())
