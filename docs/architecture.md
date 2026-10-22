@@ -144,6 +144,29 @@ provenance and non-claims is not accepted.
   artifacts were downloaded back and hash-verified. Full evidence:
   `evidence/2026-10-22-flashnext-mtp-mixed-prompt-generalization.json`.
 
+## 2026-10-22 Flash-Next MTP production validation
+
+The mixed-prompt draft was independently validated from its live private Hub
+revision. All four published files hash-match, its 54 LoRA and 36 MXFP4
+tensors are finite and cover 18 modules, and a fresh M4 Max MPS FP16 SDPA
+evaluation of all 2,044 group-disjoint pairs reproduced the effect: base top-1
+4.8434%, candidate 38.3072%, 707 wins versus 23 losses, and exact McNemar
+`p=7.17e-177`. The focused loader, evaluator, mixer, trainer, and export
+tests passed 31/31. Cross-device differences from the A6000 receipt are small
+and do not change the result.
+
+It is not production-usable yet. Strata loads `dense.txt`, `dense.bin`, and
+`experts.bin`, with no safetensors, LoRA, or MXFP4 dense-weight path and no
+converter from this artifact. More importantly, training optimized independent
+single-cell forwards without KV history while Strata's drafter attends over its
+own KV window (default 32,768 cells); the candidate also tunes an indexer
+projection the runtime dense path does not consume, and training used BF16
+shared components while serving binds the deployed quantized target and may
+restrict proposals through a draft vocabulary. No PyTorch/CUDA parity check,
+live speculative acceptance, throughput A/B, rollout flag, or rollback receipt
+exists. The verdict is therefore offline-validated but production NO-GO. Full
+evidence: `evidence/2026-10-22-flashnext-mtp-production-validation.json`.
+
 ## Contracts to preserve
 
 - E2M1 uint32 words use MLX's LSB-first `4*i` layout; byte operands use low

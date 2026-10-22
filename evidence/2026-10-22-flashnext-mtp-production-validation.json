@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-22T18:22:00Z",
+  "operator": "Codex",
+  "scope": "Independently validate the completed Flash-Next native-MTP MXFP4 QAT artifact and decide whether it is production-usable in Strata.",
+  "source_revision": "94ab4d3f8bcdf27f595404a2b8a5b0895f466219",
+  "source_dirty": false,
+  "artifact": {
+    "repository": "RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft",
+    "revision": "c9a1fbb41d62eda8321f670ae48bea6630666c8d",
+    "private": true,
+    "live_hub_roundtrip": "The README, LoRA safetensors, MXFP4 QAT safetensors, and held-out evaluation were downloaded again through the hf CLI; all four SHA-256 values match the publication receipt.",
+    "sha256": {
+      "flashnext_mtp_lora.safetensors": "0c384b727587cba7a685d7de5374f2a0369def696f605d3213e863b75044ab9e",
+      "flashnext_mtp_mxfp4_qat.safetensors": "ab64178b98858c403ecf53ec8d48e002b305f86720c8d15b963f59bd40a5d3c1",
+      "heldout-evaluation.json": "7e63451f67df73a421f7cf1908302bafe0bb813b06e7bd05f62171a874877e11",
+      "README.md": "09e370b21844c9b8bf046e886a1ff27179f0bd5ba94ee9655266476db94f626d"
+    },
+    "structure": {
+      "lora_tensors": 54,
+      "lora_modules": 18,
+      "qat_tensors": 36,
+      "qat_modules": 18,
+      "all_tensors_finite": true,
+      "tuned_surfaces": "18 dense/shared projections; routed experts, shared embedding, and shared LM head are frozen"
+    }
+  },
+  "independent_evaluation": {
+    "device": "M4 Max MPS",
+    "dtype": "float16",
+    "attention": "sdpa",
+    "pairs": 2044,
+    "base": {
+      "loss_ce": 8.898629450879866,
+      "loss_tv": 0.941483088627885,
+      "top1_match": 0.048434442270058706
+    },
+    "candidate": {
+      "loss_ce": 3.631264040010372,
+      "loss_tv": 0.6403053676021047,
+      "top1_match": 0.3830724070450098
+    },
+    "paired_test": {
+      "candidate_wins": 707,
+      "candidate_losses": 23,
+      "ties": 1314,
+      "mcnemar_exact_p_value": 7.166364618018609e-177,
+      "ce_mean_difference": -5.267365410869495,
+      "ce_difference_ci95": [-5.480959892272949, -5.066133975982666]
+    },
+    "elapsed_seconds": 147.8802671432495,
+    "comparison_to_a6000_receipt": "Direction, effect size, losses, and statistical significance reproduce. Candidate top-1 is 38.3072% here versus 38.4051% on A6000 FP16, and wins are 707 versus 709; this is cross-device numerical variation, not a conflicting result."
+  },
+  "tests": {
+    "command": "uv run --frozen --extra dev pytest tests/test_flashnext_mtp.py tests/test_flashnext_mtp_eval.py tests/test_flashnext_mtp_mixing.py tests/test_flashnext_mtp_train.py tests/test_export_flashnext_mtp_checkpoint.py -q",
+    "exit_code": 0,
+    "result": "31 passed in 1.96 seconds"
+  },
+  "production_usability": {
+    "verdict": "NO-GO for production serving",
+    "offline_quality_verdict": "validated: the exact published MXFP4 grid has a strong reproducible group-disjoint teacher-agreement improvement",
+    "runtime_repository": "RESMP-DEV/Strata",
+    "runtime_revision": "02701077299759fce50780bbccf5e2434d052043",
+    "runtime_contract": {
+      "loader": "src/core/mtp.cpp MtpDrafter::load",
+      "required_files": ["dense.txt", "dense.bin", "experts.bin"],
+      "optional_file": "draft_vocab.bin",
+      "accepted_dense_kinds": ["q8_0", "bf16", "f32"],
+      "candidate_files": ["flashnext_mtp_lora.safetensors", "flashnext_mtp_mxfp4_qat.safetensors"],
+      "converter_exists": false,
+      "runtime_mxfp4_dense_support": false,
+      "runtime_lora_support": false
+    },
+    "blockers": [
+      "No converter folds the LoRA and MXFP4 effective grid into Strata dense.bin/dense.txt or combines it with the untouched routed experts.bin.",
+      "The runtime dense path supports q8_0, bf16, and f32, not a LoRA pair or an MXFP4 tensor kind; a dequantize/repack route is possible but has not been built or measured.",
+      "The trainer optimized independent single-cell forwards with no attention KV history, while Strata's MTP drafter attends over its own KV state with a default window of 32768 cells. This context mismatch is unmeasured.",
+      "The candidate tunes self_attn.indexer.index_qk_proj, but Strata's dense MTP runtime path does not consume indexer state, so that learned component has no demonstrated serving effect.",
+      "Training used the BF16 checkpoint's shared embedding/head and experts; production binds the deployed quantized target's shared head/embedding and Q2_0 routed experts, and may restrict proposals through draft_vocab.bin. Those deltas are unmeasured.",
+      "No PyTorch-to-CUDA forward parity check, live speculative acceptance measurement, latency/throughput A/B, rollout flag, or candidate-specific rollback receipt exists."
+    ],
+    "live_host_state": {
+      "b550_gpu_0": "occupied by a peer llama-imatrix process",
+      "b550_gpu_1": "occupied by the active retrieval batch-17 epoch",
+      "strix_gpu_0": "occupied by a resident 5296 MiB probe process",
+      "effect": "No production e2e candidate run was attempted on those live processes."
+    },
+    "required_promotion_gate": [
+      "Fold and repack the exact effective candidate weights into a Strata rt_dir while preserving untouched experts and provenance hashes.",
+      "Prove a captured-row PyTorch/runtime forward parity check.",
+      "Measure live speculative acceptance, token throughput, and output identity/quality on representative prompts against the stock MTP and lookup fallback.",
+      "Gate rollout behind an explicit candidate flag with automatic fallback and a durable rollback receipt."
+    ]
+  },
+  "worker_evidence": {
+    "reproducibility_report": "build/reports/worker-audit/mtp-reproducibility.txt",
+    "integration_report": "build/reports/worker-audit/mtp-production-integration.txt",
+    "parent_correction": "The integration worker called draft-head substitution a blocker. That conclusion was not accepted: this candidate does not tune the shared head. The valid related blocker is train/serve precision and vocabulary-subset mismatch in the unchanged shared head."
+  },
+  "checks": [
+    {
+      "command": "hf download RESMP-DEV/Qwen3.8-Flash-Next-MTP-MXFP4-QAT-draft --revision c9a1fbb41d62eda8321f670ae48bea6630666c8d ...",
+      "exit_code": 0,
+      "result": "Authenticated private download succeeded and all four SHA-256 hashes matched."
+    },
+    {
+      "command": "python -m mlx_gptq.flashnext_mtp_eval on four eval banks with device=mps dtype=float16 attention=sdpa",
+      "exit_code": 0,
+      "result": "2044 pairs evaluated; candidate top-1 38.3072% versus base 4.8434%, p=7.17e-177."
+    },
+    {
+      "command": "focused pytest over five Flash-Next MTP test files",
+      "exit_code": 0,
+      "result": "31 passed."
+    },
+    {
+      "command": "ssh b550-zt/strix-zt nvidia-smi and process probes",
+      "exit_code": 0,
+      "result": "All candidate-capable GPUs had unrelated live owners, so no production e2e run was attempted."
+    }
+  ],
+  "non_claims": [
+    "Teacher-logit agreement is not live speculative acceptance and not end-to-end output quality.",
+    "The 2044-pair set is group-disjoint but limited to four evaluation prompts from the same four corpora as training.",
+    "The independent MPS evaluation validates offline behavior of the exact MXFP4 grid; it does not validate Strata's CUDA graph, KV state, quantized target head, or draft-vocabulary subset.",
+    "The candidate is not promoted, not production-default, and must not replace the stock MTP runtime on this evidence.",
+    "Focused tests do not replace the full repository quality gate; that gate is run separately before publication.",
+    "No held-out retrieval test split was read."
+  ]
+}
