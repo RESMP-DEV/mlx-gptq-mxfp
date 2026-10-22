@@ -18,6 +18,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import random
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -302,6 +303,27 @@ class MixedNativeMTPPairDataset(Dataset[dict[str, torch.Tensor]]):
     def per_bank_counts(self) -> list[int]:
         """Return the number of pairs each bank contributes."""
         return [len(dataset) for dataset in self.datasets]
+
+    def negative_index(self, index: int, seed: int = 0) -> int:
+        """Return a row index from a different bank.
+
+        The negative has to come from a different prompt, otherwise it is the
+        same trajectory and the comparison says nothing.  The choice is
+        deterministic in the index and the seed so a run is reproducible.
+        """
+        if not self.datasets:
+            raise IndexError(index)
+        owner = self.bank_index(index)
+        banks = [
+            position for position in range(len(self.datasets)) if position != owner
+        ]
+        if not banks:
+            raise ValueError("a cross-prompt negative needs at least two banks")
+        chooser = random.Random(index * 1_000_003 + seed)
+        target_bank = chooser.choice(banks)
+        offset = self.offsets[target_bank]
+        span = len(self.datasets[target_bank])
+        return offset + chooser.randrange(span)
 
 
 def write_training_manifest(

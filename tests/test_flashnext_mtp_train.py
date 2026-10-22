@@ -9,6 +9,7 @@ from mlx_gptq.flashnext_mtp_train import (
     FlashNextLoRALinear,
     anchor_regularizer,
     clamped_teacher_probability,
+    cross_prompt_contrast,
     distribution_metrics,
     export_artifacts,
     install_lora,
@@ -208,3 +209,27 @@ def test_split_banks_needs_at_least_two_banks() -> None:
         assert "at least two banks" in str(error)
     else:
         raise AssertionError("expected a ValueError for a single bank")
+
+
+def test_cross_prompt_contrast_is_zero_when_the_head_owns_its_teacher() -> None:
+    # The student is exactly the own teacher, so the margin is already met.
+    teacher = torch.tensor([[2.0, 0.0]])
+    negative = torch.tensor([[0.0, 2.0]])
+    student = teacher.clone()
+    assert float(cross_prompt_contrast(student, teacher, negative, 1.0)) == 0.0
+
+
+def test_cross_prompt_contrast_penalizes_a_memorized_prompt() -> None:
+    # The student matches the negative teacher instead of its own, so the
+    # margin is violated and the term is positive.
+    teacher = torch.tensor([[2.0, 0.0]])
+    negative = torch.tensor([[0.0, 2.0]])
+    student = negative.clone()
+    assert float(cross_prompt_contrast(student, teacher, negative, 1.0)) > 0.0
+
+
+def test_cross_prompt_contrast_is_disabled_at_zero_margin() -> None:
+    teacher = torch.tensor([[2.0, 0.0]])
+    negative = torch.tensor([[0.0, 2.0]])
+    student = negative.clone()
+    assert float(cross_prompt_contrast(student, teacher, negative, 0.0)) == 0.0

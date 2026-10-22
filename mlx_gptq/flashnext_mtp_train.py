@@ -223,6 +223,30 @@ def anchor_regularizer(
     return (base_prob * (torch.log(base_prob + 1e-30) - student_log_prob)).sum(dim=-1)
 
 
+def cross_prompt_contrast(
+    student: torch.Tensor,
+    teacher: torch.Tensor,
+    negative_teacher: torch.Tensor,
+    margin: float,
+) -> torch.Tensor:
+    """Push the head toward its own prompt's teacher, away from another's.
+
+    A head that has memorized one prompt can fit that prompt's teacher almost
+    perfectly while being far from every other prompt's teacher.  Comparing the
+    head's own log-probability under the two teachers, on the same row, makes
+    that failure visible to the optimizer: the head has to be closer to the
+    teacher of the prompt it is being trained on than to the teacher of a
+    different prompt.  A head that genuinely learned the target's draft
+    distribution satisfies this for free.
+    """
+    if margin <= 0.0:
+        return student.new_zeros(())
+    student_log_prob = torch.log_softmax(student.float(), dim=-1)
+    own = (teacher.float() * student_log_prob).sum(dim=-1)
+    other = (negative_teacher.float() * student_log_prob).sum(dim=-1)
+    return torch.clamp(margin - (own - other), min=0.0).mean()
+
+
 def start_wandb(arguments: argparse.Namespace, output: Path) -> Any | None:
     if arguments.wandb_mode == "disabled":
         return None
@@ -364,6 +388,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Minimum teacher probability mass on the top tokens. 0 keeps the "
             "exact verifier distribution."
+        ),
+    )
+    parser.add_argument(
+        "--contrast-margin",
+        type=float,
+        default=0.0,
+        help=(
+            "Margin for the cross-prompt contrast. 0 disables the term. The "
+            "head must be closer to its own prompt's teacher than to another "
+            "prompt's teacher by this margin."
         ),
     )
     parser.add_argument(
@@ -514,6 +548,20 @@ def run(arguments: argparse.Namespace) -> int:
                     arguments.tv_weight,
                     arguments.confidence_floor,
                 )
+                if arguments.contrast_margin > 0.0 and isinstance(
+                    dataset, MixedNativeMTPPairDataset
+                ):
+                    negative = dataset.negative_index(index, arguments.seed)
+                    negative_teacher = dataset[negative]["target_logits"]
+                    negative_teacher = negative_teacher.unsqueeze(0).to(
+                        arguments.device
+                    )
+                    loss = loss + cross_prompt_contrast(
+                        student,
+                        teacher,
+                        negative_teacher,
+                        arguments.contrast_margin,
+                    )
                 if base_head is not None:
                     with torch.no_grad():
                         base_logits = base_head(residual, tokens, positions=positions)[
@@ -590,6 +638,7 @@ def run(arguments: argparse.Namespace) -> int:
         "qat_mxfp4": arguments.qat_mxfp4,
         "confidence_floor": arguments.confidence_floor,
         "anchor_weight": arguments.anchor_weight,
+        "contrast_margin": arguments.contrast_margin,
         "bank_count": len(banks),
         "hold_out_banks": arguments.hold_out_banks,
         "gradient_checkpointing": arguments.gradient_checkpointing,

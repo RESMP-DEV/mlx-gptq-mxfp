@@ -73,3 +73,23 @@ def test_single_bank_dataset_matches_the_mixed_path(tmp_path: Path) -> None:
             single[index]["target_logits"], mixed[index]["target_logits"]
         )
         assert torch.equal(single[index]["residual"], mixed[index]["residual"])
+
+
+def test_negative_index_comes_from_a_different_bank(tmp_path: Path) -> None:
+    first = NativeMTPBank(_write_bank(tmp_path / "a", 6))
+    second = NativeMTPBank(_write_bank(tmp_path / "b", 5))
+    mixed = MixedNativeMTPPairDataset([first, second])
+    for index in range(len(mixed)):
+        negative = mixed.negative_index(index, seed=7)
+        assert 0 <= negative < len(mixed)
+        assert mixed.bank_index(negative) != mixed.bank_index(index)
+
+
+def test_negative_index_is_deterministic(tmp_path: Path) -> None:
+    first = NativeMTPBank(_write_bank(tmp_path / "a", 6))
+    second = NativeMTPBank(_write_bank(tmp_path / "b", 5))
+    mixed = MixedNativeMTPPairDataset([first, second])
+    for index in range(len(mixed)):
+        assert mixed.negative_index(index, seed=3) == mixed.negative_index(
+            index, seed=3
+        )
