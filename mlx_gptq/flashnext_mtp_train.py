@@ -446,6 +446,12 @@ def run(arguments: argparse.Namespace) -> int:
         if arguments.limit <= 0
         else list(range(min(arguments.limit, len(dataset))))
     )
+    if arguments.hold_out_banks and arguments.limit > 0:
+        raise ValueError(
+            "--hold-out-banks cannot be combined with --limit: limiting rows "
+            "cuts across bank boundaries, so the held-out banks would no "
+            "longer be whole prompts"
+        )
     if arguments.hold_out_banks:
         # Hold out whole banks so validation measures unseen prompts.
         pairs_per_bank = (
