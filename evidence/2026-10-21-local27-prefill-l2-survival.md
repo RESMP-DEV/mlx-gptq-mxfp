@@ -38,10 +38,14 @@ state, prefill progress, cache outcomes, and memory to
   unrelated adaptive-block assertion failure
   (`test_adaptive_verify_mode_drops_and_recovers_block_len`; expected one
   reduction, observed two). The focused snapshot tests all passed.
+- Live restart validation used an exact tokenizer-derived 9,026-token prompt.
+  The first request was cold: 9,026 physical prefill tokens, 67.9417s prefill,
+  TTFT 67.9425s. The identical retry was warm: 9,019 restored tokens, seven
+  physical tokens, 0.2419s prefill, TTFT 0.2426s, and 0.324s client wall time.
+- Before restart, `lsof` showed no established client on ports 8080 or 8081;
+   the in-process 202,300-token request was an orphaned prefill.
 
 ## Non-claims
 
-- The repair is not live in the already-running request-12 process. It applies
-  after the next service restart.
-- This change does not prove task-output parity or end-to-end cache-hit
-  latency; those require a fresh generation request after restart.
+- This validates prefix restoration and latency only. It does not prove
+  task-output parity.
