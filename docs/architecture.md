@@ -193,6 +193,15 @@ provenance and non-claims is not accepted.
   513-token `RotatingKVCache` layers with learnable per-head attention-sink
   offsets. See
   `evidence/2026-10-23-flint-independent-ppl-and-upstream.md`.
+- Published the independent WikiText-2 metrics and caveat on the public Flint
+  Hugging Face model card at `edc81733`. Promoted the high-backlog server
+  wrapper and synchronized streaming benchmark into supported scripts, with a
+  real two-request smoke and report provenance. A live vLLM Metal 0.32 probe
+  showed that macOS paged attention with GQA and sinks is real and numerically
+  close to MLX SDPA, but Flint currently fails before load because the stable
+  plugin does not recognize the `flint` Transformers config and its MLX-LM
+  dependency lacks the repaired adapter. See
+  `evidence/2026-10-23-flint-public-metrics-and-serving.md`.
 
 ## Contracts to preserve
 

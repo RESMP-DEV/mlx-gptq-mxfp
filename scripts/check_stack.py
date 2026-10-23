@@ -80,7 +80,7 @@ def checks(root: Path = ROOT) -> list[tuple[str, list[str], Path]]:
         ),
         (
             "root_tests",
-            ["uv", "run", "--frozen", "pytest", "tests", "-q"],
+            ["uv", "run", "--frozen", "pytest", "tests", "scripts/tests", "-q"],
             root,
         ),
         (
