@@ -227,3 +227,13 @@ provenance and non-claims is not accepted.
 - The resident local27 MXFP4 service is loaded by default. Explicitly evict it
   with its service script before a substantially larger local job and restore
   it afterward; do not kill the worker and race launchd.
+
+- Built and sealed a physical 224-expert Flint MXFP4 artifact from the
+  calibrated full-256 checkpoint, preserving q/scales and adding a manifest,
+  checksum set, expert map, and mask. The artifact matches full 256 on 32
+  spread agentic-coding windows: PPL 6.20609 versus 6.20711, NLL delta
+  -0.00016, CI [-0.04943, 0.04477], and saves 2.35 GiB. Added the resident
+  `dev.resmp.flint224-mxfp4` LaunchAgent on `127.0.0.1:8084`, with clean
+  process environment, four-way decode admission, health/status commands, and
+  live completion, streaming, top-20 logprob, and four-request burst checks.
+  See `evidence/2026-10-23-flint-224-mxfp4-serving.md`.
