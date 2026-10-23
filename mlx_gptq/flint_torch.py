@@ -46,11 +46,12 @@ def _rope(x: torch.Tensor, positions: torch.Tensor, theta: float) -> torch.Tenso
     angles = positions[:, None].to(x.device, torch.float32) * inv_freq[None, :]
     cos = angles.cos().to(x.dtype)
     sin = angles.sin().to(x.dtype)
-    x0 = x[..., 0::2]
-    x1 = x[..., 1::2]
+    half = dim // 2
+    x0 = x[..., :half]
+    x1 = x[..., half:]
     out = torch.empty_like(x)
-    out[..., 0::2] = x0 * cos - x1 * sin
-    out[..., 1::2] = x0 * sin + x1 * cos
+    out[..., :half] = x0 * cos - x1 * sin
+    out[..., half:] = x0 * sin + x1 * cos
     return out
 
 

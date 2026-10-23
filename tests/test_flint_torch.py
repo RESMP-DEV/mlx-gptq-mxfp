@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
+import pytest
 import torch
 from mlx_gptq.capture import CaptureManager
-from mlx_gptq.flint_torch import FlintConfig, FlintForCausalLM
+from mlx_gptq.flint_torch import FlintConfig, FlintForCausalLM, _rope
 from mlx_gptq.sequential import Pipeline, materialize_module
 
 
@@ -66,6 +68,19 @@ def _causal_mask(hidden):
         torch.arange(length)[:, None] >= torch.arange(length)[None, :]
     )
     return causal
+
+
+def test_flint_rope_matches_neox_half_split_mlx():
+    mx = pytest.importorskip("mlx.core")
+    mlx_nn = pytest.importorskip("mlx.nn")
+
+    rng = np.random.default_rng(19)
+    values = rng.normal(size=(1, 2, 3, 16)).astype(np.float32)
+    expected = mlx_nn.RoPE(16, traditional=False, base=10000)(
+        mx.array(values), offset=3
+    )
+    actual = _rope(torch.tensor(values), torch.arange(3, 6, dtype=torch.float32), 10000)
+    np.testing.assert_allclose(np.array(expected), actual.numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_flint_layer_materializes_from_checkpoint_names():

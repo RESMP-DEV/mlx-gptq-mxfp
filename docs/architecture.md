@@ -202,6 +202,11 @@ provenance and non-claims is not accepted.
   plugin does not recognize the `flint` Transformers config and its MLX-LM
   dependency lacks the repaired adapter. See
   `evidence/2026-10-23-flint-public-metrics-and-serving.md`.
+- Repaired the eager Flint calibration skeleton to use NeoX-style half-split
+  RoPE, matching the repaired MLX runtime's `traditional=False` behavior. A
+  direct MLX parity regression now pins the layout. Future RCO-mask search,
+  materialized 192-expert recalibration, and any GSQ lane must run after this
+  repair. See `evidence/2026-10-23-flint-calibration-rope-repair.md`.
 
 ## Contracts to preserve
 
