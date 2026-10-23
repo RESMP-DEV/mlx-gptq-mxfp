@@ -175,6 +175,15 @@ provenance and non-claims is not accepted.
   shards under `RESMP-DEV/Flint-40B-A2.5B-MLX-GPTQ-MXFP4`; every remote LFS
   SHA-256 and size matched locally. See
   `evidence/2026-10-23-flint-mlx-eval-publication.md`.
+- Benchmarked the repaired public Flint checkpoint on the M4 Max. Direct
+  greedy generation decoded at 126.98 tok/s at short context, 111.97 tok/s
+  after 8K prompt tokens, and 91.89 tok/s after 32K prompt tokens. A
+  high-backlog temporary MLX-LM server reached its practical best at 128
+  concurrent short-prompt requests: 663.99 aggregate completion tok/s, 801.20
+  aggregate decode tok/s, 2.93 s median TTFT, and a 54 GB footprint. The
+  192-way run is not recommended: although decode reached 840.05 tok/s,
+  completion throughput and TTFT regressed and the footprint reached 92 GB.
+  See `evidence/2026-10-23-flint-m4-performance.md`.
 
 ## Contracts to preserve
 
