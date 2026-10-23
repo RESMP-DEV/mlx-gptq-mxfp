@@ -207,6 +207,13 @@ provenance and non-claims is not accepted.
   direct MLX parity regression now pins the layout. Future RCO-mask search,
   materialized 192-expert recalibration, and any GSQ lane must run after this
   repair. See `evidence/2026-10-23-flint-calibration-rope-repair.md`.
+- Ported the omni-use top-20 logprob Shannon-entropy controller to an opt-in
+  Flint benchmark. MLX-LM now supports 20 top logprobs, and mlx-stack calibrates
+  a real-prefix cut/continue policy with fail-closed missing-entropy behavior.
+  A two-task live smoke exercised the full wire path and reduced the capped run
+  from 64 to 32 mean tokens without changing the measured hit count. This is
+  transport proof, not general quality or savings. See
+  `evidence/2026-10-23-flint-reasoning-entropy.md`.
 
 ## Contracts to preserve
 
