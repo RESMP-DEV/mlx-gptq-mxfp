@@ -184,6 +184,15 @@ provenance and non-claims is not accepted.
   192-way run is not recommended: although decode reached 840.05 tok/s,
   completion throughput and TTFT regressed and the footprint reached 92 GB.
   See `evidence/2026-10-23-flint-m4-performance.md`.
+- Added an independent WikiText-2 raw-validation correctness gate. Over sixteen
+  fixed 2,048-token windows and identical source tokenization, MXFP4 reached
+  PPL 21.2884 versus BF16 22.3666, with mean NLL lower by 0.04940 nats/token
+  and 73.20% exact top-1 agreement with BF16. The upstream RecursiveSI source
+  revision is unchanged, upstream MLX-LM has no Flint implementation, and the
+  Flint cache is standard hybrid attention: 14 full `KVCache` layers plus 35
+  513-token `RotatingKVCache` layers with learnable per-head attention-sink
+  offsets. See
+  `evidence/2026-10-23-flint-independent-ppl-and-upstream.md`.
 
 ## Contracts to preserve
 
