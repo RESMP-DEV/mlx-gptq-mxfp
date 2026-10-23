@@ -128,3 +128,39 @@ gate is used with templated chat prompts.
   format, checkpoint, and quantization.
 - Entropy is a confidence signal, not proof of correctness.
 - The controller does not change the published model weights.
+
+## Exact-cache continuation repair and chat-marker replay
+
+The role-marker blocker is now repaired in `RESMP-DEV/mlx-lm` commit
+`de15a0e` with evidence in `evidence/2026-10-23-exact-prompt-cache-continuation.md`.
+An exact prompt-cache hit previously consumed every token segment and caused
+`Sequence N has an empty prompt`; the server now re-prefills the full prompt and
+keeps the generation thread alive. The dedicated HTTP regression fails before
+the fix and passes afterward; the full server suite passes 42 tests.
+
+The same four-task chat fixture was replayed against the fixed server at
+`http://127.0.0.1:8083` with the 21 GB `/Users/kearm/mlx-stack/build/flint-resharded`
+checkpoint, two calibration tasks, two held-out tasks, a 16-token checkpoint,
+a 16-token probe, and a 64-token cap.
+
+Result:
+
+- all calibration and held-out requests completed; the generation thread
+  stayed alive;
+- calibration threshold: `0.15389435978063082` bits;
+- held-out cuts: 0;
+- held-out continues: 2;
+- mean tokens: 64.0 baseline, 64.0 policy;
+- mean wall time: 0.8057 s baseline, 0.7856 s policy;
+- measured hit count: 1/2 in both arms.
+
+This replay proves the formerly fatal chat-marker path now works end to end.
+It does not show a token or latency win: the calibrated threshold was below
+both observed checkpoint entropies (`0.30838` and `0.22176`), so the controller
+correctly chose continue twice. A representative agentic coding calibration set
+is still required before claiming savings.
+
+Artifacts:
+
+- `build/reports/flint-entropy/simple-chat-fixed-2x2-c16-p16-max64.json`
+- `build/reports/flint-entropy/simple-chat-fixed-2x2-c16-p16-max64.log`
