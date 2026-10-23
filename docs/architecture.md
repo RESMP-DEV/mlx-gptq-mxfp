@@ -163,6 +163,19 @@ provenance and non-claims is not accepted.
   The reset diagnostic proves a forced reset path but not the original stall
   cause. See `evidence/2026-10-22-flint-post-restart-status.md`.
 
+## 2026-10-23 work log
+
+- Tested the real Flint checkpoint in MLX, found and repaired a routed-expert
+  gate/up activation-order defect in `RESMP-DEV/mlx-lm`, and invalidated the
+  earlier incoherent adapter measurements. On the real held-out coding corpus,
+  the repaired owned MXFP4 checkpoint reached PPL 7.4038, BF16 reached 8.5360,
+  and the official Apple Q4_1 control reached 6.1512. The owned artifact kept
+  77.86% next-token top-1 agreement with BF16 and decoded at 131.5 tok/s with
+  35.5 GiB peak memory. It is published publicly as 25 verified roughly 1 GB
+  shards under `RESMP-DEV/Flint-40B-A2.5B-MLX-GPTQ-MXFP4`; every remote LFS
+  SHA-256 and size matched locally. See
+  `evidence/2026-10-23-flint-mlx-eval-publication.md`.
+
 ## Contracts to preserve
 
 - E2M1 uint32 words use MLX's LSB-first `4*i` layout; byte operands use low
